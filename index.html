@@ -23,7 +23,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -38,10 +38,16 @@
         <button type="button" class="person" role="radio" aria-checked="true"  data-person="k">Костя</button>
         <button type="button" class="person" role="radio" aria-checked="false" data-person="a">Маша</button>
       </div>
-      <button type="button" class="theme-btn" id="themeBtn" aria-label="Включить светлую тему">
+      <div class="toprow__actions">
+      <button type="button" class="icon-btn" id="soundBtn" aria-pressed="true" aria-label="Выключить звук">
+        <svg class="ico-bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+        <svg class="ico-bell-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-9.3-5"/><path d="M6.2 6.2A6 6 0 0 0 6 8c0 5-2 6-2 6h11"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/><path d="M3 3l18 18"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="themeBtn" aria-label="Включить светлую тему">
         <svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
         <svg class="ico-sun"  viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
       </button>
+      </div>
     </div>
 
     <!-- Дни -->
@@ -67,7 +73,10 @@
 
   <section id="panel-day" role="tabpanel" aria-labelledby="tab-mon">
     <div id="exList" class="ex-list"></div>
-    <button type="button" class="reset-day" id="resetDay">Сбросить день</button>
+    <div class="day-actions" id="dayActions">
+      <button type="button" class="btn btn--primary" id="sendReport">Отправить отчёт</button>
+      <button type="button" class="btn btn--danger" id="resetDay">Сбросить день</button>
+    </div>
   </section>
 
   <section id="panel-help" role="tabpanel" aria-labelledby="tab-help" class="help" hidden>
@@ -136,6 +145,12 @@
       <p>Белок на 4 приёма по 35–40 г. Вода 2,5–3 л. Из добавок доказательную базу имеет только креатин
         моногидрат — 5 г в день, без загрузки.</p>
       <p><b>Главный рычаг при сидячей работе — шаги.</b> 8000 шагов это ~350–400 ккал, больше любой правки макросов.</p>
+
+      <h2>Телеграм</h2>
+      <p>Когда закрыта последняя галочка дня, отчёт с упражнениями и весами уходит в личку.
+        Подключается один раз — ссылка откроет бота с уже подставленной командой:</p>
+      <p><a class="tg-link" data-person="k" href="#" target="_blank" rel="noopener">Подключить телеграм</a></p>
+      <p class="muted">Отчёт можно отправить и вручную кнопкой под списком упражнений.</p>
     </div>
 
     <!-- ══════════ Справка: она ══════════ -->
@@ -251,6 +266,12 @@
       <p class="muted">Коэффициент активности взят как для сидячей работы плюс три тренировки.
         Если день активный физически — прибавить ~150 ккал. Цифры точны примерно на ±10%:
         реальный ответ дают весы за 2–3 недели стабильного питания.</p>
+
+      <h2>Телеграм</h2>
+      <p>Когда закрыта последняя галочка дня, отчёт с упражнениями и весами уходит в личку.
+        Подключается один раз — ссылка откроет бота с уже подставленной командой:</p>
+      <p><a class="tg-link" data-person="a" href="#" target="_blank" rel="noopener">Подключить телеграм</a></p>
+      <p class="muted">Отчёт можно отправить и вручную кнопкой под списком упражнений.</p>
     </div>
 
     <h2>Источники</h2>
@@ -270,6 +291,8 @@
   </section>
 
 </main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="timer" id="timer">
   <div class="timer__line"><div class="timer__line-fill" id="timerLine"></div></div>
@@ -294,7 +317,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
 </svg>
 
-<script src="data.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="data.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

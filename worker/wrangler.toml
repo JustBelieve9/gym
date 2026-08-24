@@ -1,0 +1,12 @@
+# Конфигурация Worker gym-report.
+# ВАЖНО: токен бота сюда не пишется НИКОГДА — он ставится отдельно:
+#   npx wrangler secret put TG_TOKEN
+# Секреты хранятся на стороне Cloudflare и в репозиторий не попадают.
+
+name = "gym-report"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[[kv_namespaces]]
+binding = "CHATS"
+id = "7cf5eeae7539446caeb4e10fb844ffc0"

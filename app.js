@@ -1,27 +1,33 @@
-/* Логика: выбор человека и темы, рендер дня, отметка подходов, прогресс,
-   таймер отдыха, сохранение в localStorage, wake lock.
+/* Логика: выбор человека и темы, рендер дня, отметка подходов, рабочие веса,
+   прогресс, таймер отдыха со звуком, отчёт в телеграм, wake lock.
    Программы живут в data.js. */
 (function () {
   "use strict";
 
   var PREFIX = "gym-";
+  var REPORT_URL = "https://gym-report.thezavarkin.workers.dev";
   var THEME_COLOR = { dark: "#0B1120", light: "#EEF1F6" };
 
   var el = {
     people:      document.querySelectorAll(".person"),
     themeBtn:    document.getElementById("themeBtn"),
+    soundBtn:    document.getElementById("soundBtn"),
     themeColor:  document.getElementById("themeColor"),
     tabs:        document.querySelectorAll(".tab"),
     panelDay:    document.getElementById("panel-day"),
     panelHelp:   document.getElementById("panel-help"),
     helpBlocks:  document.querySelectorAll(".help-block"),
+    tgLinks:     document.querySelectorAll(".tg-link"),
     list:        document.getElementById("exList"),
     subtitle:    document.getElementById("daySubtitle"),
     doneCount:   document.getElementById("doneCount"),
     totalCount:  document.getElementById("totalCount"),
     fill:        document.getElementById("progressFill"),
     progress:    document.getElementById("progressBlock"),
+    dayActions:  document.getElementById("dayActions"),
+    sendReport:  document.getElementById("sendReport"),
     resetDay:    document.getElementById("resetDay"),
+    toast:       document.getElementById("toast"),
     timer:       document.getElementById("timer"),
     timerTime:   document.getElementById("timerTime"),
     timerLabel:  document.getElementById("timerLabel"),
@@ -31,13 +37,14 @@
     timerSkip:   document.getElementById("timerSkip")
   };
 
-  var state = { person: DEFAULT_PERSON, day: null, done: [] };
-  var timer = { endAt: 0, total: 0, last: 0, int: null, running: false };
+  var state = { person: DEFAULT_PERSON, day: null, done: [], weights: [], startedAt: 0, sent: false };
+  var timer = { endAt: 0, total: 0, last: 0, int: null, running: false, nodes: null, scheduled: false };
 
   function store(k, v) { try { localStorage.setItem(PREFIX + k, v); } catch (e) {} }
   function recall(k)   { try { return localStorage.getItem(PREFIX + k); } catch (e) { return null; } }
-
-  function program() { return PEOPLE[state.person].program; }
+  function program()   { return PEOPLE[state.person].program; }
+  function pad(n)      { return n < 10 ? "0" + n : String(n); }
+  function esc(s)      { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
   /* ───────── Тема ───────── */
 
@@ -50,53 +57,173 @@
       requestAnimationFrame(function () { root.classList.remove("theme-switching"); });
     });
     if (el.themeColor) el.themeColor.setAttribute("content", THEME_COLOR[theme]);
-    el.themeBtn.setAttribute("aria-label",
-      theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
+    el.themeBtn.setAttribute("aria-label", theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
     store("theme", theme);
   }
 
   el.themeBtn.addEventListener("click", function () {
-    var now = document.documentElement.getAttribute("data-theme");
-    applyTheme(now === "dark" ? "light" : "dark");
+    applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
   });
 
-  /* ───────── Хранилище отметок ───────── */
+  /* ───────── Звук ─────────
+     iOS усыпляет Web Audio, как только экран гаснет или браузер уходит в фон.
+     Поэтому три слоя: беззвучный медиа-луп держит аудиосессию живой, тон
+     планируется в аудиографе заранее (переживает торможение главного потока),
+     Media Session помечает страницу как играющую медиа. */
+
+  var audioCtx = null, keepAliveEl = null, silentUrl = null;
+
+  function soundOn() { return recall("sound") !== "off"; }
+
+  function applySound(on) {
+    store("sound", on ? "on" : "off");
+    document.documentElement.setAttribute("data-sound", on ? "on" : "off");
+    el.soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    el.soundBtn.setAttribute("aria-label", on ? "Выключить звук" : "Включить звук");
+    if (!on) { cancelChime(); stopKeepAlive(); }
+  }
+
+  el.soundBtn.addEventListener("click", function () { applySound(!soundOn()); });
+
+  function ctx() {
+    try {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      audioCtx = audioCtx || new C();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      return audioCtx;
+    } catch (e) { return null; }
+  }
+
+  /* Почти-тишина, а не чистые нули: нулевой поток iOS может выбросить как пустой */
+  function silentWav(seconds, rate) {
+    var n = Math.floor(seconds * rate), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    function s(off, str) { for (var i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); }
+    s(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); s(8, "WAVE");
+    s(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    s(36, "data"); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+
+  function startKeepAlive() {
+    if (!soundOn()) return;
+    if (!keepAliveEl) {
+      silentUrl = silentUrl || silentWav(0.5, 8000);
+      keepAliveEl = document.createElement("audio");
+      keepAliveEl.src = silentUrl;
+      keepAliveEl.loop = true;
+      keepAliveEl.setAttribute("playsinline", "");
+      keepAliveEl.volume = 0.02;
+      document.body.appendChild(keepAliveEl);
+    }
+    var p = keepAliveEl.play();
+    if (p && p.catch) p.catch(function () {});
+  }
+
+  function stopKeepAlive() { if (keepAliveEl) { try { keepAliveEl.pause(); } catch (e) {} } }
+
+  /* Два коротких тона, E6 -> B6. Свой синтез, не копия чужого сигнала. */
+  function chime(at) {
+    var c = ctx();
+    if (!c) return null;
+    var t0 = at != null ? at : c.currentTime + 0.02, nodes = [];
+    [[1319, 0], [1976, 0.07]].forEach(function (n) {
+      var o = c.createOscillator(), g = c.createGain(), t = t0 + n[1];
+      o.type = "triangle";
+      o.frequency.setValueAtTime(n[0], t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(c.destination);
+      o.start(t); o.stop(t + 0.18);
+      nodes.push(o);
+    });
+    return nodes;
+  }
+
+  function cancelChime() {
+    if (!timer.nodes) return;
+    timer.nodes.forEach(function (o) { try { o.stop(0); o.disconnect(); } catch (e) {} });
+    timer.nodes = null;
+    timer.scheduled = false;
+  }
+
+  function mediaSession(on, label) {
+    if (!("mediaSession" in navigator)) return;
+    try {
+      if (on) {
+        if (window.MediaMetadata) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: "Отдых · " + label,
+            artist: PEOPLE[state.person].label,
+            album: "Тренировка"
+          });
+        }
+        navigator.mediaSession.playbackState = "playing";
+      } else {
+        navigator.mediaSession.playbackState = "none";
+      }
+    } catch (e) {}
+  }
+
+  function vibrate(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+
+  /* ───────── Хранилище ───────── */
 
   function today() {
     var d = new Date();
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
-  function pad(n) { return n < 10 ? "0" + n : String(n); }
-
   function key(day) { return state.person + "-" + day; }   // у каждого свои отметки
 
   function fresh(day) {
     return program()[day].exercises.map(function (ex) { return new Array(ex.sets).fill(false); });
   }
+  function freshWeights(day) { return program()[day].exercises.map(function () { return null; }); }
 
   function load(day) {
+    var blank = { sets: fresh(day), weights: freshWeights(day), startedAt: 0, sent: false };
     var raw = recall(key(day));
-    if (!raw) return fresh(day);
+    if (!raw) return blank;
     try {
       var saved = JSON.parse(raw);
-      // Новый день — отметки прошлой тренировки больше не актуальны
-      if (!saved || saved.date !== today()) return fresh(day);
-      // Программу могли поправить в data.js — сверяем форму данных
-      var shape = fresh(day);
-      if (!Array.isArray(saved.sets) || saved.sets.length !== shape.length) return shape;
+      if (!saved || saved.date !== today()) return blank;   // новый день — отметки не актуальны
+      var shape = blank.sets;
+      if (!Array.isArray(saved.sets) || saved.sets.length !== shape.length) return blank;
       for (var i = 0; i < shape.length; i++) {
-        if (!Array.isArray(saved.sets[i]) || saved.sets[i].length !== shape[i].length) return shape;
+        if (!Array.isArray(saved.sets[i]) || saved.sets[i].length !== shape[i].length) return blank;
       }
-      return saved.sets;
-    } catch (e) {
-      return fresh(day);
-    }
+      return {
+        sets: saved.sets,
+        // записи до появления весов их не содержат — дополняем, а не считаем битыми
+        weights: Array.isArray(saved.weights) && saved.weights.length === shape.length
+          ? saved.weights : freshWeights(day),
+        startedAt: saved.startedAt || 0,
+        sent: Boolean(saved.sent)
+      };
+    } catch (e) { return blank; }
   }
 
-  function save() { store(key(state.day), JSON.stringify({ date: today(), sets: state.done })); }
+  function save() {
+    store(key(state.day), JSON.stringify({
+      date: today(), sets: state.done, weights: state.weights,
+      startedAt: state.startedAt, sent: state.sent
+    }));
+  }
 
-  /* Разовый перенос со старой схемы ключей (gym-mon) на новую (gym-k-mon).
-     До появления второго человека отметки хранились без его признака. */
+  /* Последние веса — по НАЗВАНИЮ упражнения, не по номеру: перестановка
+     программы в data.js не должна путать веса между упражнениями. */
+  function lastWeights() {
+    try { return JSON.parse(recall(state.person + "-lastw") || "{}"); } catch (e) { return {}; }
+  }
+  function rememberWeight(name, val) {
+    var m = lastWeights();
+    if (val == null) delete m[name]; else m[name] = val;
+    store(state.person + "-lastw", JSON.stringify(m));
+  }
+
   (function migrateLegacyKeys() {
     DAY_ORDER.forEach(function (day) {
       var legacy = recall(day);
@@ -117,6 +244,8 @@
     return "отдых " + m + (s ? ":" + pad(s) : " мин");
   }
 
+  function fmtWeight(n) { return String(n).replace(".", ","); }
+
   function exerciseNode(ex, idx) {
     var art = document.createElement("article");
     art.className = "ex";
@@ -135,18 +264,77 @@
         '<h3 class="ex__name">' + ex.name + "</h3>" +
       "</div>" +
       '<div class="ex__row">' +
-        '<span class="ex__scheme">' + ex.sets + " × " + ex.reps +
-          '<span class="ex__rest">' + restLabel(ex.rest) + "</span>" +
-        "</span>" +
+        '<span class="ex__scheme">' + ex.sets + " × " + ex.reps + "</span>" +
         '<div class="sets" role="group" aria-label="Подходы: ' + ex.name + '">' + sets + "</div>" +
+      "</div>" +
+      '<div class="ex__foot">' +
+        '<span class="ex__rest">' + restLabel(ex.rest) + "</span>" +
+        '<span class="wslot" data-w="' + idx + '"></span>' +
       "</div>";
 
     return art;
   }
 
+  function renderWeight(idx) {
+    var slot = el.list.querySelector('.wslot[data-w="' + idx + '"]');
+    if (!slot) return;
+    var ex = program()[state.day].exercises[idx];
+    var own = state.weights[idx];
+    var hint = lastWeights()[ex.name];
+    var label = "Рабочий вес: " + ex.name;
+
+    if (own != null) {
+      slot.innerHTML = '<button type="button" class="weight" aria-label="' + label + '">' +
+        "<b>" + fmtWeight(own) + "</b> кг</button>";
+    } else if (hint != null) {
+      slot.innerHTML = '<button type="button" class="weight weight--hint" aria-label="' + label +
+        ', в прошлый раз ' + fmtWeight(hint) + '"><b>' + fmtWeight(hint) + "</b> кг</button>";
+    } else {
+      slot.innerHTML = '<button type="button" class="weight weight--empty" aria-label="' + label +
+        '">+ вес</button>';
+    }
+  }
+
+  function openWeightEditor(idx) {
+    var slot = el.list.querySelector('.wslot[data-w="' + idx + '"]');
+    if (!slot) return;
+    var ex = program()[state.day].exercises[idx];
+    var start = state.weights[idx] != null ? state.weights[idx] : lastWeights()[ex.name];
+
+    slot.innerHTML = '<input class="winput" type="text" inputmode="decimal" enterkeyhint="done"' +
+      ' aria-label="Рабочий вес: ' + ex.name + '" value="' + (start != null ? fmtWeight(start) : "") +
+      '"><span class="winput__unit">кг</span>';
+
+    var input = slot.querySelector(".winput");
+    input.focus();
+    input.select();
+
+    function commit() {
+      input.removeEventListener("blur", commit);
+      var raw = input.value.trim().replace(",", ".");
+      var n = raw === "" ? null : parseFloat(raw);
+      if (n != null && (!isFinite(n) || n < 0 || n > 999)) n = state.weights[idx];
+      state.weights[idx] = n;
+      rememberWeight(ex.name, n);
+      save();
+      renderWeight(idx);
+    }
+    function cancel() { input.removeEventListener("blur", commit); renderWeight(idx); }
+
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+      if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+  }
+
   function renderDay(day) {
     state.day = day;
-    state.done = load(day);
+    var loaded = load(day);
+    state.done = loaded.sets;
+    state.weights = loaded.weights;
+    state.startedAt = loaded.startedAt;
+    state.sent = loaded.sent;
 
     var data = program()[day];
     el.subtitle.textContent = data.subtitle;
@@ -167,6 +355,7 @@
         group = null; groupKey = null;
         el.list.appendChild(node);
       }
+      renderWeight(i);
     });
 
     restoreMarks();
@@ -185,32 +374,41 @@
     });
   }
 
-  function updateProgress() {
+  function counts() {
     var done = 0, total = 0;
     state.done.forEach(function (arr) {
       total += arr.length;
       arr.forEach(function (v) { if (v) done++; });
     });
-    el.doneCount.textContent = done;
-    el.totalCount.textContent = total;
-    el.fill.style.width = total ? (done / total * 100) + "%" : "0%";
-    el.fill.classList.toggle("is-complete", total > 0 && done === total);
-    el.progress.setAttribute("aria-label", "Прогресс дня: " + done + " из " + total + " подходов");
+    return { done: done, total: total };
   }
 
-  /* ───────── Подходы ───────── */
+  function updateProgress() {
+    var c = counts();
+    el.doneCount.textContent = c.done;
+    el.totalCount.textContent = c.total;
+    el.fill.style.width = c.total ? (c.done / c.total * 100) + "%" : "0%";
+    el.fill.classList.toggle("is-complete", c.total > 0 && c.done === c.total);
+    el.progress.setAttribute("aria-label", "Прогресс дня: " + c.done + " из " + c.total + " подходов");
+    el.sendReport.disabled = c.done === 0;
+  }
+
+  /* ───────── Подходы и веса ───────── */
 
   el.list.addEventListener("click", function (e) {
+    var w = e.target.closest(".weight");
+    if (w) { openWeightEditor(Number(w.closest(".wslot").dataset.w)); return; }
+
     var btn = e.target.closest(".set");
     if (!btn) return;
     var art = btn.closest(".ex");
-    var exIdx = Number(art.dataset.ex);
-    var setIdx = Number(btn.dataset.set);
+    var exIdx = Number(art.dataset.ex), setIdx = Number(btn.dataset.set);
 
     var on = !state.done[exIdx][setIdx];
     state.done[exIdx][setIdx] = on;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
     art.classList.toggle("is-done", state.done[exIdx].every(Boolean));
+    if (on && !state.startedAt) state.startedAt = Date.now();
 
     save();
     updateProgress();
@@ -220,12 +418,16 @@
       keepAwake();
       var rest = program()[state.day].exercises[exIdx].rest;
       if (rest > 0) startTimer(rest);
+      var c = counts();
+      if (c.done === c.total && !state.sent) sendReport(true);
     }
   });
 
   el.resetDay.addEventListener("click", function () {
     if (!confirm("Сбросить все отметки за " + program()[state.day].title.toLowerCase() + "?")) return;
     state.done = fresh(state.day);
+    state.startedAt = 0;
+    state.sent = false;
     save();
     restoreMarks();
     updateProgress();
@@ -236,6 +438,7 @@
   function fmt(sec) { return Math.floor(sec / 60) + ":" + pad(sec % 60); }
 
   function startTimer(sec) {
+    cancelChime();
     timer.total = sec;
     timer.last = sec;
     timer.endAt = Date.now() + sec * 1000;
@@ -243,6 +446,14 @@
     el.timer.classList.remove("is-done");
     el.timer.classList.add("is-open");
     el.timerLabel.textContent = "Отдых";
+
+    if (soundOn()) {
+      startKeepAlive();
+      var c = ctx();
+      if (c) { timer.nodes = chime(c.currentTime + sec); timer.scheduled = Boolean(timer.nodes); }
+    }
+    mediaSession(true, fmt(sec));
+
     tick();
     if (timer.int) clearInterval(timer.int);
     timer.int = setInterval(tick, 200);
@@ -263,8 +474,12 @@
     el.timerLabel.textContent = "Готово";
     el.timerTime.textContent = "0:00";
     el.timerLine.style.width = "100%";
-    beep();
+    // если тон был запланирован заранее — он уже прозвучал сам, второй раз не нужен
+    if (soundOn() && !timer.scheduled) chime();
+    timer.nodes = null;
+    timer.scheduled = false;
     vibrate([70, 80, 70]);
+    mediaSession(false);
     setTimeout(function () { if (!timer.running) closeTimer(); }, 6000);
   }
 
@@ -272,6 +487,9 @@
     clearInterval(timer.int);
     timer.int = null;
     timer.running = false;
+    cancelChime();
+    stopKeepAlive();
+    mediaSession(false);
     el.timer.classList.remove("is-open");
   }
 
@@ -279,36 +497,73 @@
     if (!timer.running) { startTimer(30); return; }
     timer.endAt += 30000;
     timer.total += 30;
+    cancelChime();
+    if (soundOn()) {
+      var c = ctx();
+      if (c) {
+        timer.nodes = chime(c.currentTime + Math.max(0, (timer.endAt - Date.now()) / 1000));
+        timer.scheduled = Boolean(timer.nodes);
+      }
+    }
     tick();
   });
   el.timerRestart.addEventListener("click", function () { startTimer(timer.last || 90); });
   el.timerSkip.addEventListener("click", closeTimer);
 
-  /* Короткий бип через Web Audio — без внешних файлов */
-  var audioCtx = null;
-  function beep() {
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      audioCtx = audioCtx || new Ctx();
-      if (audioCtx.state === "suspended") audioCtx.resume();
-      [0, 0.18].forEach(function (offset) {
-        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        var t = audioCtx.currentTime + offset;
-        o.type = "sine";
-        o.frequency.setValueAtTime(880, t);
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start(t); o.stop(t + 0.16);
-      });
-    } catch (e) { /* звук недоступен — остаётся вибрация */ }
+  /* ───────── Отчёт в телеграм ───────── */
+
+  function toast(msg, bad) {
+    el.toast.textContent = msg;
+    el.toast.classList.toggle("is-bad", Boolean(bad));
+    el.toast.classList.add("is-on");
+    clearTimeout(toast.t);
+    toast.t = setTimeout(function () { el.toast.classList.remove("is-on"); }, 4000);
   }
 
-  function vibrate(pattern) {
-    if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
+  function reportText() {
+    var d = program()[state.day], c = counts(), lines = [];
+    lines.push("🏋️ <b>" + esc(PEOPLE[state.person].label) + " · " + esc(d.title) + "</b>");
+    lines.push(esc(d.subtitle));
+    lines.push("");
+    d.exercises.forEach(function (ex, i) {
+      var arr = state.done[i], n = arr.filter(Boolean).length;
+      var mark = n === arr.length ? "✅" : (n ? "🟡" : "⚪️");
+      var w = state.weights[i];
+      lines.push(mark + " " + esc(ex.name) +
+        (w != null ? " · " + fmtWeight(w) + " кг" : "") + " · " + n + "/" + arr.length);
+    });
+    lines.push("");
+    var tail = "<b>" + c.done + "/" + c.total + "</b> подходов";
+    if (state.startedAt) {
+      var mins = Math.round((Date.now() - state.startedAt) / 60000);
+      if (mins > 0 && mins < 300) tail += " · " + mins + " мин";
+    }
+    lines.push(tail);
+    return lines.join("\n");
   }
+
+  function sendReport(auto) {
+    var body = JSON.stringify({ person: state.person, text: reportText() });
+    el.sendReport.disabled = true;
+    fetch(REPORT_URL + "/report", {
+      method: "POST", headers: { "content-type": "application/json" }, body: body
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.j.ok) {
+          state.sent = true; save();
+          toast(auto ? "Тренировка закрыта, отчёт отправлен" : "Отчёт отправлен");
+        } else if (res.j && res.j.error === "телеграм не подключён") {
+          toast("Телеграм не подключён — ссылка в «Справке»", true);
+        } else {
+          toast("Не удалось отправить отчёт", true);
+        }
+      })
+      .catch(function () { toast("Нет связи — отчёт не ушёл", true); })
+      .then(function () { updateProgress(); });
+  }
+
+  el.sendReport.addEventListener("click", function () { sendReport(false); });
 
   /* ───────── Экран не гаснет ───────── */
 
@@ -336,6 +591,7 @@
       b.tabIndex = active ? 0 : -1;
     });
     el.helpBlocks.forEach(function (b) { b.hidden = b.dataset.person !== person; });
+    el.tgLinks.forEach(function (a) { a.href = REPORT_URL + "/link?p=" + a.dataset.person; });
 
     store("person", person);
     if (state.day) renderDay(state.day);
@@ -391,6 +647,7 @@
   /* ───────── Старт ───────── */
 
   applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+  applySound(soundOn());
   selectPerson(recall("person") || DEFAULT_PERSON);
   selectTab(WEEKDAY_MAP[new Date().getDay()] || "mon");
 })();

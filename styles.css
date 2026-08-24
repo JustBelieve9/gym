@@ -125,7 +125,8 @@ a { color:var(--primary); }
 .person[aria-checked="true"] { background:var(--primary); color:var(--on-primary); font-weight:700; }
 .person:active { transform:scale(.96); }
 
-.theme-btn {
+.toprow__actions { display:flex; gap:var(--sp-2); flex:0 0 auto; }
+.icon-btn {
   flex:0 0 auto;
   width:var(--tap); height:var(--tap);
   display:grid; place-items:center;
@@ -133,11 +134,15 @@ a { color:var(--primary); }
   background:var(--card);
   transition:background-color var(--dur) var(--ease);
 }
-.theme-btn svg { width:20px; height:20px; fill:none; stroke:var(--fg-muted); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-.theme-btn:active { transform:scale(.94); }
+.icon-btn svg { width:20px; height:20px; fill:none; stroke:var(--fg-muted); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.icon-btn:active { transform:scale(.94); }
 /* В тёмной теме показываем солнце (куда переключимся), в светлой — луну */
 [data-theme="dark"]  .ico-moon { display:none; }
 [data-theme="light"] .ico-sun  { display:none; }
+/* Колокольчик показывает текущее состояние, а не будущее */
+[data-sound="on"]  .ico-bell-off { display:none; }
+[data-sound="off"] .ico-bell     { display:none; }
+[data-sound="on"]  #soundBtn svg { stroke:var(--primary); }
 
 /* Дни */
 .tabs { display:flex; gap:var(--sp-2); padding:6px 0; }
@@ -210,7 +215,36 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
 
 .ex__row { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-3); flex-wrap:wrap; }
 .ex__scheme { font-family:var(--font-display); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
-.ex__rest { display:block; font-family:var(--font-body); font-size:13px; font-weight:400; color:var(--fg-muted); letter-spacing:0; }
+
+/* Третья строка карточки: слева отдых, справа рабочий вес */
+.ex__foot { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-2); }
+.ex__rest { font-size:13px; color:var(--fg-muted); }
+
+.wslot { display:flex; align-items:center; gap:var(--sp-2); }
+.weight {
+  min-height:var(--tap); min-width:72px;
+  padding:0 var(--sp-3);
+  border:1px solid var(--divider); border-radius:var(--r-md);
+  background:var(--card-2);
+  font-size:15px; color:var(--fg);
+  display:inline-flex; align-items:center; gap:4px;
+  transition:background-color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.weight b { font-family:var(--font-display); font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+.weight:active { transform:scale(.96); }
+/* Подсказка с прошлой тренировки: приглушённо и пунктиром — значение ещё не подтверждено */
+.weight--hint { background:transparent; border-style:dashed; color:var(--fg-muted); }
+.weight--empty { background:transparent; border-style:dashed; color:var(--fg-muted); font-size:14px; }
+
+.winput {
+  width:96px; height:var(--tap);
+  padding:0 var(--sp-3);
+  border:2px solid var(--ring); border-radius:var(--r-md);
+  background:var(--card-2); color:var(--fg);
+  font-family:var(--font-display); font-size:20px; font-weight:700;
+  font-variant-numeric:tabular-nums; text-align:right;
+}
+.winput__unit { font-size:15px; color:var(--fg-muted); }
 
 /* Кружки подходов: тап-зона ровно 44×44, зазор 8 */
 .sets { display:flex; gap:var(--sp-2); }
@@ -230,14 +264,35 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
 .set[aria-pressed="true"] .set__n { display:none; }
 .set[aria-pressed="true"] svg { display:block; }
 
-.reset-day {
-  display:block; width:100%; min-height:var(--tap); margin-top:var(--sp-6);
+.day-actions { display:flex; flex-direction:column; gap:var(--sp-2); margin-top:var(--sp-6); }
+.btn {
+  display:block; width:100%; min-height:var(--tap);
   border:1px solid var(--divider); border-radius:var(--r-md);
-  color:var(--destructive); font-size:15px; font-weight:500;
-  transition:background-color var(--dur) var(--ease);
+  font-size:15px; font-weight:500;
+  transition:background-color var(--dur) var(--ease), opacity var(--dur) var(--ease);
 }
-.reset-day:hover { background:var(--card); }
-.reset-day:active { transform:scale(.98); }
+.btn:active { transform:scale(.98); }
+.btn:disabled { opacity:.45; cursor:default; }
+.btn:disabled:active { transform:none; }
+.btn--primary { background:var(--primary); border-color:var(--primary); color:var(--on-primary); font-weight:600; }
+.btn--danger { color:var(--destructive); }
+.btn--danger:hover { background:var(--card); }
+
+/* Тост о результате отправки отчёта. Над плашкой таймера. */
+.toast {
+  position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom));
+  z-index:var(--z-overlay);
+  transform:translate(-50%, 12px);
+  max-width:calc(100% - 32px);
+  padding:var(--sp-3) var(--sp-4);
+  border-radius:var(--r-md);
+  background:var(--accent); color:var(--on-accent);
+  font-size:15px; font-weight:600; text-align:center;
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+}
+.toast.is-on { opacity:1; visibility:visible; transform:translate(-50%, 0); transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s; }
+.toast.is-bad { background:var(--destructive); color:var(--bg); }
 
 /* ═══════════════ Таймер ═══════════════ */
 .timer {
