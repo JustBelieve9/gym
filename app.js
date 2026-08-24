@@ -542,9 +542,19 @@
     return lines.join("\n");
   }
 
+  var sending = false;
+
   function sendReport(auto) {
+    if (sending) return;                       // защита от двойного тапа
+    if (auto && state.sent) return;
+    sending = true;
+    // Помечаем СИНХРОННО, до запроса: иначе поправленная галочка успеет
+    // запустить вторую автоотправку, пока летит первая, и придёт дубль.
+    if (auto) { state.sent = true; save(); }
+
     var body = JSON.stringify({ person: state.person, text: reportText() });
     el.sendReport.disabled = true;
+
     fetch(REPORT_URL + "/report", {
       method: "POST", headers: { "content-type": "application/json" }, body: body
     })
@@ -553,14 +563,18 @@
         if (res.ok && res.j.ok) {
           state.sent = true; save();
           toast(auto ? "Тренировка закрыта, отчёт отправлен" : "Отчёт отправлен");
-        } else if (res.j && res.j.error === "телеграм не подключён") {
-          toast("Телеграм не подключён — ссылка в «Справке»", true);
         } else {
-          toast("Не удалось отправить отчёт", true);
+          if (auto) { state.sent = false; save(); }   // откат: пусть попробует ещё раз
+          toast(res.j && res.j.error === "телеграм не подключён"
+            ? "Телеграм не подключён — ссылка в «Справке»"
+            : "Не удалось отправить отчёт", true);
         }
       })
-      .catch(function () { toast("Нет связи — отчёт не ушёл", true); })
-      .then(function () { updateProgress(); });
+      .catch(function () {
+        if (auto) { state.sent = false; save(); }
+        toast("Нет связи — отчёт не ушёл", true);
+      })
+      .then(function () { sending = false; updateProgress(); });
   }
 
   el.sendReport.addEventListener("click", function () { sendReport(false); });
