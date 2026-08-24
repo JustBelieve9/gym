@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1120">
+<meta name="description" content="Программа тренировок: три дня в неделю, гипертрофия, отметка подходов и таймер отдыха.">
+<title>Тренировка</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Перейти к упражнениям</a>
+
+<!-- ─────────── Липкая шапка: вкладки + прогресс дня ─────────── -->
+<header class="topbar">
+  <div class="wrap">
+    <div class="tabs" role="tablist" aria-label="Дни тренировок">
+      <button class="tab" role="tab" id="tab-mon"  aria-controls="panel-day"  data-day="mon">Пн</button>
+      <button class="tab" role="tab" id="tab-wed"  aria-controls="panel-day"  data-day="wed">Ср</button>
+      <button class="tab" role="tab" id="tab-fri"  aria-controls="panel-day"  data-day="fri">Пт</button>
+      <button class="tab" role="tab" id="tab-help" aria-controls="panel-help" data-day="help">Справка</button>
+    </div>
+
+    <div class="progress" id="progressBlock">
+      <div class="progress__meta">
+        <span class="progress__label" id="daySubtitle">Верх A · акцент грудь</span>
+        <span class="progress__count"><b id="doneCount">0</b><span class="progress__slash">/</span><span id="totalCount">20</span></span>
+      </div>
+      <div class="progress__track">
+        <div class="progress__fill" id="progressFill"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ─────────── Контент ─────────── -->
+<main id="main" class="wrap">
+
+  <section id="panel-day" role="tabpanel" aria-labelledby="tab-mon">
+    <div id="exList" class="ex-list"></div>
+    <button type="button" class="reset-day" id="resetDay">Сбросить день</button>
+  </section>
+
+  <section id="panel-help" role="tabpanel" aria-labelledby="tab-help" class="help" hidden>
+
+    <h2>Как работать</h2>
+    <ul>
+      <li><b>RIR 2–3 на базовых, 0–1 на изоляции.</b> Отказ в приседе и жиме не нужен: близость к отказу
+        добавляет гипертрофии, но сила от неё почти не зависит, а усталость растёт резко.</li>
+      <li><b>Темп:</b> 2–3 с негатив, 1 с пауза в растянутой позиции, мощная концентрика без рывка.</li>
+      <li><b>Разминка:</b> 5 мин кардио и 2–3 подводящих подхода на первом упражнении группы. В счёт не идут.</li>
+      <li><b>Прогрессия по повторам.</b> Все подходы закрыты по верхней границе диапазона с RIR 1–2 →
+        +2,5 кг на базовое, +1–2 кг на изоляцию. Вес догоняет форму, а не наоборот.</li>
+      <li><b>Прогрессия по объёму.</b> Раз в 2–3 недели можно добавить <b>один</b> подход отстающей группе,
+        если восстановление в порядке. Потолок роста — +30% за блок в 6–8 недель.</li>
+      <li><b>Смена упражнений</b> — раз в 8–12 недель или когда прогресс встал три тренировки подряд. Не чаще.</li>
+      <li><b>Сон 7–9 ч.</b> Влияет на восстановление сильнее любой добавки.</li>
+    </ul>
+
+    <h2>Разгрузка — по состоянию, не по календарю</h2>
+    <p>Плановая неделя разгрузки каждые 6–8 недель доказательной поддержки не имеет: в работе Coleman
+      и соавторов запланированная разгрузка не улучшила гипертрофию, а непрерывная группа набрала
+      <b>больше</b> силы. Берём разгрузку по триггерам:</p>
+    <ul>
+      <li>повторы падают две тренировки подряд при том же весе;</li>
+      <li>испортился сон;</li>
+      <li>ноют суставы;</li>
+      <li>пропала тяга идти в зал.</li>
+    </ul>
+    <p>Сработало — неделя в половину подходов, вес −20%.</p>
+
+    <h2>Целевой объём</h2>
+    <p>Ориентир — <b>10–12 фракционных подходов на мышцу в неделю</b>. Фракционный счёт: прямой подход
+      считается за 1, косвенный за 0,5 (жим даёт трицепсу полподхода, тяга — бицепсу).</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Мышца</th><th>Прямых</th><th>Фракционно</th></tr></thead>
+        <tbody>
+          <tr><td>Грудь</td><td>12</td><td>12</td></tr>
+          <tr><td>Спина</td><td>12</td><td>12</td></tr>
+          <tr><td>Боковые дельты</td><td>8</td><td>9,5</td></tr>
+          <tr><td>Задние дельты</td><td>5</td><td>6,5</td></tr>
+          <tr><td>Передние дельты</td><td>3</td><td>9</td></tr>
+          <tr><td>Бицепс</td><td>6</td><td>12</td></tr>
+          <tr><td>Трицепс</td><td>5</td><td>11</td></tr>
+          <tr><td>Квадрицепс</td><td>6</td><td>7,5</td></tr>
+          <tr><td>Бицепс бедра</td><td>6</td><td>7,5</td></tr>
+          <tr><td>Икры</td><td>5</td><td>5</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Всего 68 рабочих подходов в неделю: 20 + 23 + 25.</p>
+
+    <h2>Что сознательно не делаем</h2>
+    <ul>
+      <li><b>Дропсеты.</b> Прироста не дают: гипертрофия SMD 0,04 (p&nbsp;=&nbsp;0,81), сила SMD −0,04
+        (p&nbsp;=&nbsp;0,80). При этом RPE выше на SMD 1,62. Та же отдача за большую усталость.</li>
+      <li><b>Формальная периодизация.</b> Линейная и волнообразная по гипертрофии неразличимы
+        (SMD −0,02, p&nbsp;=&nbsp;0,85). Она выигрывает в силе, а силу мы не гоним.</li>
+      <li><b>Дилоады по календарю.</b> См. выше.</li>
+    </ul>
+
+    <h2>КБЖУ</h2>
+    <p>Поддержание веса при сидячей работе и трёх тренировках: <b>2400–2550 ккал</b>.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th>Тренировка ×3</th><th>Отдых ×4</th></tr></thead>
+        <tbody>
+          <tr><td>Калории</td><td>2600</td><td>2350</td></tr>
+          <tr><td>Белок</td><td>150 г</td><td>150 г</td></tr>
+          <tr><td>Жиры</td><td>70 г</td><td>70 г</td></tr>
+          <tr><td>Углеводы</td><td>340 г</td><td>280 г</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Белок разбить на 4 приёма по 35–40 г. Вода 2,5–3 л. Из добавок доказательную базу имеет только
+      креатин моногидрат — 5 г в день, в любое время, без загрузки.</p>
+    <p><b>Главный рычаг при сидячей работе — шаги, а не еда.</b> 8000 шагов это ~350–400 ккал, больше
+      любой правки макросов.</p>
+    <p class="muted">Цифры — оценка ±10%. Настоящий ответ даёт весы: 2–3 недели стабильного питания,
+      взвешивание утром натощак. Вес поплыл на ±1 кг — сдвинуть на 150–200 ккал, и только тогда.</p>
+
+    <h2>Источники</h2>
+    <ul class="sources">
+      <li><a href="https://link.springer.com/article/10.1007/s40279-025-02344-w" target="_blank" rel="noopener">Pelland et al., Sports Medicine, 2026</a> — дозозависимость объёма</li>
+      <li><a href="https://journals.physiology.org/doi/full/10.1152/japplphysiol.00476.2024" target="_blank" rel="noopener">Enes et al., J Appl Physiol, 2024</a> — скачок объёма не окупается</li>
+      <li><a href="https://sportrxiv.org/index.php/server/preprint/view/537" target="_blank" rel="noopener">Remmert et al., 2025</a> — потолок подходов за сессию</li>
+      <li><a href="https://link.springer.com/article/10.1007/s40279-024-02069-2" target="_blank" rel="noopener">Robinson et al., Sports Medicine, 2024</a> — близость к отказу</li>
+      <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC13043944/" target="_blank" rel="noopener">Метаанализ дропсетов, 2026</a></li>
+      <li><a href="https://peerj.com/articles/3695/" target="_blank" rel="noopener">Grgic et al., PeerJ, 2017</a> — периодизация</li>
+      <li><a href="https://peerj.com/articles/16777/" target="_blank" rel="noopener">Coleman et al., PeerJ, 2024</a> — дилоады</li>
+    </ul>
+  </section>
+
+</main>
+
+<!-- ─────────── Плашка таймера отдыха ─────────── -->
+<div class="timer" id="timer">
+  <div class="timer__line"><div class="timer__line-fill" id="timerLine"></div></div>
+  <div class="wrap timer__inner">
+    <div class="timer__left">
+      <span class="timer__label" id="timerLabel">Отдых</span>
+      <span class="timer__time" id="timerTime" role="timer" aria-live="off">0:00</span>
+    </div>
+    <div class="timer__actions">
+      <button type="button" class="tbtn" id="timerAdd" aria-label="Добавить 30 секунд">+30</button>
+      <button type="button" class="tbtn" id="timerRestart" aria-label="Запустить отдых заново">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg>
+      </button>
+      <button type="button" class="tbtn tbtn--primary" id="timerSkip" aria-label="Пропустить отдых">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l10 7-10 7V5z"/><path d="M19 5v14"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+</svg>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
