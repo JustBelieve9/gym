@@ -65,46 +65,41 @@ const PEOPLE = {
   },
 
   /* ──────────────────────────────────────────────────────────────
-     Низ / верх / низ, акцент на ягодицы и ноги. 50 подходов в неделю.
-     Повторов больше, отдых короче: женщины устойчивее к утомлению
-     внутри подхода и быстрее восстанавливаются между подходами.
+     Низ / верх / низ, акцент на ягодицы. 36 подходов в неделю.
+     Только база, изоляции на мелкие мышцы нет. Отдых длинный —
+     по 2–3 минуты на компаундах.
      ────────────────────────────────────────────────────────────── */
   a: {
-    label: "Она",
+    label: "Маша",
     program: {
       mon: {
         title: "Понедельник",
-        subtitle: "Низ A · ягодицы и бицепс бедра",
+        subtitle: "Низ A · задняя цепь",
         exercises: [
-          { name: "Хип-траст со штангой",              sets: 4, reps: "8–12",  rest: 120, superset: null },
-          { name: "Румынская тяга",                    sets: 3, reps: "10–12", rest: 120, superset: null },
-          { name: "Болгарский сплит-присед",           sets: 3, reps: "10–12", rest:  90, superset: null },
-          { name: "Сгибания ног сидя",                 sets: 3, reps: "12–15", rest:  60, superset: null },
-          { name: "Отведение бедра в тренажёре",       sets: 3, reps: "15–20", rest:  45, superset: null }
+          { name: "Хип-траст со штангой",        sets: 4, reps: "8–12",  rest: 180, superset: null },
+          { name: "Румынская тяга",              sets: 3, reps: "8–10",  rest: 180, superset: null },
+          { name: "Болгарский сплит-присед",     sets: 3, reps: "10–12", rest: 150, superset: null },
+          { name: "Сгибания ног сидя",           sets: 2, reps: "10–12", rest: 120, superset: null }
         ]
       },
       wed: {
         title: "Среда",
         subtitle: "Верх",
         exercises: [
-          { name: "Вертикальная тяга широким хватом",     sets: 3, reps: "10–12", rest: 90, superset: null },
-          { name: "Жим гантелей сидя",                    sets: 3, reps: "10–12", rest: 90, superset: null },
-          { name: "Тяга горизонтального блока",           sets: 3, reps: "10–12", rest: 90, superset: null },
-          { name: "Махи в стороны с гантелями",           sets: 4, reps: "12–20", rest:  0, superset: "a" },
-          { name: "Обратная бабочка (задняя дельта)",     sets: 2, reps: "15–20", rest: 60, superset: "a" },
-          { name: "Сгибания на бицепс с гантелями",       sets: 2, reps: "10–15", rest:  0, superset: "b" },
-          { name: "Разгибания на трицепс на блоке вниз",  sets: 2, reps: "10–15", rest: 60, superset: "b" }
+          { name: "Жим гантелей на наклонной скамье 30°", sets: 4, reps: "8–12",  rest: 150, superset: null },
+          { name: "Вертикальная тяга широким хватом",     sets: 3, reps: "8–12",  rest: 150, superset: null },
+          { name: "Жим гантелей сидя",                    sets: 3, reps: "8–12",  rest: 150, superset: null },
+          { name: "Тяга горизонтального блока",           sets: 2, reps: "10–12", rest: 120, superset: null }
         ]
       },
       fri: {
         title: "Пятница",
-        subtitle: "Низ B · квадрицепс и ягодицы",
+        subtitle: "Низ B · квадрицепс",
         exercises: [
-          { name: "Присед со штангой / гакк-присед",        sets: 4, reps: "8–12",  rest: 150, superset: null },
-          { name: "Выпады с гантелями назад",               sets: 3, reps: "10–12", rest:  90, superset: null },
-          { name: "Жим ногами",                             sets: 3, reps: "12–15", rest:  90, superset: null },
-          { name: "Гиперэкстензия с акцентом на ягодицы",   sets: 3, reps: "12–15", rest:  60, superset: null },
-          { name: "Подъёмы на носки сидя",                  sets: 2, reps: "12–20", rest:  45, superset: null }
+          { name: "Присед со штангой / гакк-присед",      sets: 4, reps: "8–12",  rest: 180, superset: null },
+          { name: "Выпады с гантелями назад",             sets: 3, reps: "10–12", rest: 150, superset: null },
+          { name: "Гиперэкстензия с акцентом на ягодицы", sets: 3, reps: "12–15", rest: 120, superset: null },
+          { name: "Жим ногами",                           sets: 2, reps: "10–15", rest: 150, superset: null }
         ]
       }
     }
