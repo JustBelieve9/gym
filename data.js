@@ -15,6 +15,7 @@ const PEOPLE = {
 
   /* ──────────────────────────────────────────────────────────────
      Верх-низ, акцент на грудь и спину. 68 подходов в неделю.
+     Порядок чередуется жим/тяга: соседние упражнения не бьют в одну мышцу.
      ────────────────────────────────────────────────────────────── */
   k: {
     label: "Костя",
@@ -23,9 +24,9 @@ const PEOPLE = {
         title: "Понедельник",
         subtitle: "Верх A · акцент грудь",
         exercises: [
-          { name: "Жим гантелей на наклонной скамье 30°",                sets: 3, reps: "6–10",  rest: 150, superset: null },
+          { name: "Жим штанги лёжа",                                     sets: 3, reps: "6–10",  rest: 180, superset: null },
           { name: "Подтягивания с весом / вертикальная тяга нейтральным", sets: 3, reps: "8–12",  rest: 150, superset: null },
-          { name: "Жим в хаммере (горизонтальный)",                       sets: 3, reps: "8–12",  rest: 120, superset: null },
+          { name: "Жим гантелей на наклонной скамье 30°",                 sets: 3, reps: "8–12",  rest: 150, superset: null },
           { name: "Тяга горизонтального блока узким хватом",              sets: 3, reps: "10–12", rest: 120, superset: null },
           { name: "Махи в стороны в кроссовере (одной рукой)",            sets: 3, reps: "12–20", rest:  60, superset: null },
           { name: "Подъём гантелей на бицепс на наклонной",               sets: 3, reps: "8–12",  rest:   0, superset: "a" },
@@ -37,11 +38,11 @@ const PEOPLE = {
         subtitle: "Низ + плечи",
         exercises: [
           { name: "Присед со штангой / гакк-присед",  sets: 3, reps: "6–10",  rest: 180, superset: null },
+          { name: "Жим сидя (гантели или тренажёр)",  sets: 3, reps: "8–12",  rest: 120, superset: null },
           { name: "Румынская тяга",                   sets: 3, reps: "8–12",  rest: 150, superset: null },
           { name: "Жим ногами",                       sets: 3, reps: "10–15", rest: 120, superset: null },
           { name: "Сгибания ног сидя",                sets: 3, reps: "10–12", rest:  90, superset: null },
           { name: "Подъёмы на носки стоя",            sets: 3, reps: "8–15",  rest:  60, superset: null },
-          { name: "Жим сидя (гантели или тренажёр)",  sets: 3, reps: "8–12",  rest: 120, superset: null },
           { name: "Обратная бабочка (задняя дельта)", sets: 3, reps: "15–20", rest:   0, superset: "a" },
           { name: "Махи в стороны с гантелями",       sets: 2, reps: "12–20", rest:  90, superset: "a" }
         ]
@@ -51,7 +52,7 @@ const PEOPLE = {
         subtitle: "Верх B · акцент спина",
         exercises: [
           { name: "Тяга штанги в наклоне / Т-гриф",                sets: 3, reps: "8–12",  rest: 150, superset: null },
-          { name: "Жим штанги лёжа",                               sets: 3, reps: "6–10",  rest: 180, superset: null },
+          { name: "Жим в хаммере (горизонтальный)",                sets: 3, reps: "8–12",  rest: 150, superset: null },
           { name: "Вертикальная тяга широким хватом",              sets: 3, reps: "10–12", rest: 120, superset: null },
           { name: "Жим в наклонном тренажёре / брусья с наклоном", sets: 3, reps: "8–12",  rest: 120, superset: null },
           { name: "Махи в стороны с гантелями",                    sets: 3, reps: "12–20", rest:   0, superset: "a" },
