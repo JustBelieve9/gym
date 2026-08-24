@@ -1,14 +1,20 @@
-/* Логика: рендер дня, отметка подходов, прогресс, таймер отдыха,
-   сохранение в localStorage, wake lock. Программа живёт в data.js. */
+/* Логика: выбор человека и темы, рендер дня, отметка подходов, прогресс,
+   таймер отдыха, сохранение в localStorage, wake lock.
+   Программы живут в data.js. */
 (function () {
   "use strict";
 
   var PREFIX = "gym-";
+  var THEME_COLOR = { dark: "#0B1120", light: "#EEF1F6" };
 
   var el = {
+    people:      document.querySelectorAll(".person"),
+    themeBtn:    document.getElementById("themeBtn"),
+    themeColor:  document.getElementById("themeColor"),
     tabs:        document.querySelectorAll(".tab"),
     panelDay:    document.getElementById("panel-day"),
     panelHelp:   document.getElementById("panel-help"),
+    helpBlocks:  document.querySelectorAll(".help-block"),
     list:        document.getElementById("exList"),
     subtitle:    document.getElementById("daySubtitle"),
     doneCount:   document.getElementById("doneCount"),
@@ -25,10 +31,36 @@
     timerSkip:   document.getElementById("timerSkip")
   };
 
-  var state = { day: null, done: [] };
+  var state = { person: DEFAULT_PERSON, day: null, done: [] };
   var timer = { endAt: 0, total: 0, last: 0, int: null, running: false };
 
-  /* ───────── Хранилище ───────── */
+  function store(k, v) { try { localStorage.setItem(PREFIX + k, v); } catch (e) {} }
+  function recall(k)   { try { return localStorage.getItem(PREFIX + k); } catch (e) { return null; } }
+
+  function program() { return PEOPLE[state.person].program; }
+
+  /* ───────── Тема ───────── */
+
+  function applyTheme(theme) {
+    var root = document.documentElement;
+    root.classList.add("theme-switching");
+    void root.offsetWidth;               // форсируем пересчёт, чтобы глушилка успела примениться
+    root.setAttribute("data-theme", theme);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { root.classList.remove("theme-switching"); });
+    });
+    if (el.themeColor) el.themeColor.setAttribute("content", THEME_COLOR[theme]);
+    el.themeBtn.setAttribute("aria-label",
+      theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
+    store("theme", theme);
+  }
+
+  el.themeBtn.addEventListener("click", function () {
+    var now = document.documentElement.getAttribute("data-theme");
+    applyTheme(now === "dark" ? "light" : "dark");
+  });
+
+  /* ───────── Хранилище отметок ───────── */
 
   function today() {
     var d = new Date();
@@ -36,16 +68,16 @@
   }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
 
+  function key(day) { return state.person + "-" + day; }   // у каждого свои отметки
+
   function fresh(day) {
-    return PROGRAM[day].exercises.map(function (ex) {
-      return new Array(ex.sets).fill(false);
-    });
+    return program()[day].exercises.map(function (ex) { return new Array(ex.sets).fill(false); });
   }
 
   function load(day) {
+    var raw = recall(key(day));
+    if (!raw) return fresh(day);
     try {
-      var raw = localStorage.getItem(PREFIX + day);
-      if (!raw) return fresh(day);
       var saved = JSON.parse(raw);
       // Новый день — отметки прошлой тренировки больше не актуальны
       if (!saved || saved.date !== today()) return fresh(day);
@@ -61,17 +93,22 @@
     }
   }
 
-  function save() {
-    try {
-      localStorage.setItem(PREFIX + state.day, JSON.stringify({ date: today(), sets: state.done }));
-    } catch (e) { /* приватный режим — молча работаем без сохранения */ }
-  }
+  function save() { store(key(state.day), JSON.stringify({ date: today(), sets: state.done })); }
+
+  /* Разовый перенос со старой схемы ключей (gym-mon) на новую (gym-k-mon).
+     До появления второго человека отметки хранились без его признака. */
+  (function migrateLegacyKeys() {
+    DAY_ORDER.forEach(function (day) {
+      var legacy = recall(day);
+      if (legacy === null) return;
+      if (recall(DEFAULT_PERSON + "-" + day) === null) store(DEFAULT_PERSON + "-" + day, legacy);
+      try { localStorage.removeItem(PREFIX + day); } catch (e) {}
+    });
+  })();
 
   /* ───────── Рендер ───────── */
 
-  function icon(id) {
-    return '<svg aria-hidden="true"><use href="#' + id + '"></use></svg>';
-  }
+  function icon(id) { return '<svg aria-hidden="true"><use href="#' + id + '"></use></svg>'; }
 
   function restLabel(sec) {
     if (!sec) return "без отдыха";
@@ -111,7 +148,7 @@
     state.day = day;
     state.done = load(day);
 
-    var data = PROGRAM[day];
+    var data = program()[day];
     el.subtitle.textContent = data.subtitle;
     el.list.innerHTML = "";
 
@@ -181,13 +218,13 @@
     if (on) {
       vibrate(10);
       keepAwake();
-      var rest = PROGRAM[state.day].exercises[exIdx].rest;
+      var rest = program()[state.day].exercises[exIdx].rest;
       if (rest > 0) startTimer(rest);
     }
   });
 
   el.resetDay.addEventListener("click", function () {
-    if (!confirm("Сбросить все отметки за " + PROGRAM[state.day].title.toLowerCase() + "?")) return;
+    if (!confirm("Сбросить все отметки за " + program()[state.day].title.toLowerCase() + "?")) return;
     state.done = fresh(state.day);
     save();
     restoreMarks();
@@ -196,10 +233,7 @@
 
   /* ───────── Таймер отдыха ───────── */
 
-  function fmt(sec) {
-    var m = Math.floor(sec / 60), s = sec % 60;
-    return m + ":" + pad(s);
-  }
+  function fmt(sec) { return Math.floor(sec / 60) + ":" + pad(sec % 60); }
 
   function startTimer(sec) {
     timer.total = sec;
@@ -250,7 +284,7 @@
   el.timerRestart.addEventListener("click", function () { startTimer(timer.last || 90); });
   el.timerSkip.addEventListener("click", closeTimer);
 
-  /* Короткий бип через Web Audio — без внешних файлов, работает и без сети */
+  /* Короткий бип через Web Audio — без внешних файлов */
   var audioCtx = null;
   function beep() {
     try {
@@ -284,13 +318,43 @@
     navigator.wakeLock.request("screen").then(function (l) {
       lock = l;
       l.addEventListener("release", function () { lock = null; });
-    }).catch(function () { /* не поддерживается или отказано — не критично */ });
+    }).catch(function () {});
   }
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") { keepAwake(); if (timer.running) tick(); }
   });
 
-  /* ───────── Вкладки ───────── */
+  /* ───────── Переключатель человека ───────── */
+
+  function selectPerson(person) {
+    if (!PEOPLE[person]) person = DEFAULT_PERSON;
+    state.person = person;
+
+    el.people.forEach(function (b) {
+      var active = b.dataset.person === person;
+      b.setAttribute("aria-checked", active ? "true" : "false");
+      b.tabIndex = active ? 0 : -1;
+    });
+    el.helpBlocks.forEach(function (b) { b.hidden = b.dataset.person !== person; });
+
+    store("person", person);
+    if (state.day) renderDay(state.day);
+  }
+
+  el.people.forEach(function (b) {
+    b.addEventListener("click", function () { selectPerson(b.dataset.person); });
+    b.addEventListener("keydown", function (e) {
+      var step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      var arr = Array.prototype.slice.call(el.people);
+      var next = arr[(arr.indexOf(b) + step + arr.length) % arr.length];
+      next.focus();
+      selectPerson(next.dataset.person);
+    });
+  });
+
+  /* ───────── Вкладки дней ───────── */
 
   function selectTab(day) {
     el.tabs.forEach(function (t) {
@@ -308,23 +372,25 @@
       renderDay(day);
       el.panelDay.setAttribute("aria-labelledby", "tab-" + day);
     }
-    try { localStorage.setItem(PREFIX + "lastTab", day); } catch (e) {}
+    store("lastTab", day);
   }
 
   el.tabs.forEach(function (t) {
     t.addEventListener("click", function () { selectTab(t.dataset.day); });
     t.addEventListener("keydown", function (e) {
-      var keys = { ArrowLeft: -1, ArrowRight: 1 };
-      if (!(e.key in keys)) return;
+      var step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (!step) return;
       e.preventDefault();
       var arr = Array.prototype.slice.call(el.tabs);
-      var i = (arr.indexOf(t) + keys[e.key] + arr.length) % arr.length;
-      arr[i].focus();
-      selectTab(arr[i].dataset.day);
+      var next = arr[(arr.indexOf(t) + step + arr.length) % arr.length];
+      next.focus();
+      selectTab(next.dataset.day);
     });
   });
 
   /* ───────── Старт ───────── */
 
+  applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+  selectPerson(recall("person") || DEFAULT_PERSON);
   selectTab(WEEKDAY_MAP[new Date().getDay()] || "mon");
 })();

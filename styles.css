@@ -1,24 +1,5 @@
-/* ═══════════════ Токены ═══════════════
-   Палитра — Fitness/Gym App (ui-ux-pro-max), фон углублён до OLED-тёмного.
-   Все текстовые пары проверены расчётом WCAG, минимум по AA пройден.
-   Оранжевый = «идёт сейчас», зелёный = «сделано». Роли не смешивать. */
+/* ═══════════════ Токены, не зависящие от темы ═══════════════ */
 :root {
-  --bg:#0B1120;
-  --card:#1A2337;
-  --card-2:#212C43;
-  --divider:#2A3548;
-  --border-control:#64748B;   /* 3.29:1 к карточке — граница контрола видима */
-
-  --fg:#F8FAFC;               /* 18:1  */
-  --fg-muted:#9AA8BD;         /* 6.5:1 */
-
-  --primary:#F97316;          /* 5.59:1 на карточке */
-  --on-primary:#0B1120;
-  --accent:#22C55E;           /* 6.88:1 на карточке */
-  --on-accent:#0B1120;
-  --destructive:#F87171;      /* #EF4444 давал 4.17:1 — не проходил */
-  --ring:#F97316;
-
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-6:24px; --sp-8:32px;
   --r-sm:8px; --r-md:12px; --r-lg:16px;
   --icon:24px;
@@ -33,6 +14,54 @@
 
   --font-display:"Barlow Condensed","Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --font-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+
+/* ═══════════════ Тёмная тема ═══════════════
+   Все текстовые пары проверены расчётом WCAG, минимум AA пройден.
+   Оранжевый = «идёт сейчас», зелёный = «сделано». Роли не смешивать. */
+[data-theme="dark"] {
+  --bg:#0B1120;
+  --card:#1A2337;
+  --card-2:#212C43;
+  --divider:#2A3548;
+  --border-control:#64748B;   /* 3.29:1 к карточке */
+  --fg:#F8FAFC;               /* 14.98:1 */
+  --fg-muted:#9AA8BD;         /* 6.50:1  */
+  --primary:#F97316;          /* 5.59:1  */
+  --on-primary:#0B1120;
+  --accent:#22C55E;           /* 6.88:1  */
+  --on-accent:#0B1120;
+  --destructive:#F87171;
+  --ring:#F97316;
+  --card-shadow:none;
+  --timer-shadow:0 -8px 24px rgba(0,0,0,.35);
+}
+
+/* ═══════════════ Светлая тема ═══════════════
+   Оранжевый и зелёный из тёмной темы на белом дают 2.80:1 и 2.28:1 —
+   не проходят, поэтому здесь взяты затемнённые варианты. */
+[data-theme="light"] {
+  --bg:#EEF1F6;
+  --card:#FFFFFF;
+  --card-2:#E2E8F0;
+  --divider:#DDE3EC;
+  --border-control:#7C8CA3;   /* 3.42:1 к карточке */
+  --fg:#0F172A;               /* 17.85:1 */
+  --fg-muted:#5A6478;         /* 5.95:1  */
+  --primary:#C2410C;          /* 5.18:1  */
+  --on-primary:#FFFFFF;
+  --accent:#15803D;           /* 5.02:1  */
+  --on-accent:#FFFFFF;
+  --destructive:#B91C1C;
+  --ring:#C2410C;
+  --card-shadow:0 1px 2px rgba(15,23,42,.07);  /* карточка/фон всего 1.13:1, тень помогает разделить */
+  --timer-shadow:0 -8px 24px rgba(15,23,42,.12);
+}
+
+/* Переход на background-color застревает со старым значением, если сама переменная
+   меняется на предке. Поэтому на кадр смены темы переходы глушим полностью. */
+.theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition:none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -54,6 +83,7 @@ body {
   line-height:1.5;
   overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
+  transition:background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; touch-action:manipulation; }
 a { color:var(--primary); }
@@ -77,38 +107,72 @@ a { color:var(--primary); }
   padding-top:env(safe-area-inset-top);
 }
 
-.tabs { display:flex; gap:var(--sp-2); padding:var(--sp-3) 0 var(--sp-2); }
+/* Кто тренируется + тема */
+.toprow { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2); padding-top:var(--sp-2); }
+
+.people {
+  display:flex;
+  background:var(--card-2);
+  border-radius:var(--r-md);
+  overflow:hidden;
+}
+.person {
+  min-height:var(--tap); padding:0 var(--sp-4);
+  color:var(--fg-muted);
+  font-family:var(--font-display); font-size:18px; font-weight:600; letter-spacing:.01em;
+  transition:background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.person[aria-checked="true"] { background:var(--primary); color:var(--on-primary); font-weight:700; }
+.person:active { transform:scale(.96); }
+
+.theme-btn {
+  flex:0 0 auto;
+  width:var(--tap); height:var(--tap);
+  display:grid; place-items:center;
+  border:1px solid var(--divider); border-radius:var(--r-md);
+  background:var(--card);
+  transition:background-color var(--dur) var(--ease);
+}
+.theme-btn svg { width:20px; height:20px; fill:none; stroke:var(--fg-muted); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.theme-btn:active { transform:scale(.94); }
+/* В тёмной теме показываем солнце (куда переключимся), в светлой — луну */
+[data-theme="dark"]  .ico-moon { display:none; }
+[data-theme="light"] .ico-sun  { display:none; }
+
+/* Дни */
+.tabs { display:flex; gap:var(--sp-2); padding:6px 0; }
 .tab {
-  flex:1 1 auto; min-height:var(--tap);
-  padding:0 var(--sp-3);
+  flex:1 1 auto; min-height:var(--tap); padding:0 var(--sp-3);
   border-radius:var(--r-md);
   background:var(--card);
   color:var(--fg-muted);
-  font-family:var(--font-display);
-  font-size:18px; font-weight:600; letter-spacing:.02em;
-  transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
+  font-family:var(--font-display); font-size:18px; font-weight:600; letter-spacing:.02em;
+  transition:background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .tab:last-child { flex:0 0 auto; font-size:15px; font-family:var(--font-body); font-weight:500; }
 .tab[aria-selected="true"] { background:var(--primary); color:var(--on-primary); font-weight:700; }
 .tab:active { transform:scale(.96); }
 
-.progress { padding-bottom:var(--sp-3); }
+.progress { padding-bottom:var(--sp-2); }
 .progress__meta { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); }
-.progress__label { color:var(--fg-muted); font-size:14px; }
+.progress__label { color:var(--fg-muted); font-size:13px; }
 .progress__count { font-family:var(--font-display); font-variant-numeric:tabular-nums; font-size:18px; color:var(--fg-muted); }
-.progress__count b { color:var(--fg); font-size:22px; font-weight:700; }
+.progress__count b { color:var(--fg); font-size:20px; font-weight:700; }
 .progress__slash { margin-inline:2px; opacity:.5; }
 
-.progress__track { height:6px; margin-top:var(--sp-2); border-radius:999px; background:var(--card-2); overflow:hidden; }
+/* Полоса прижата к нижней кромке шапки: не занимает строку и служит разделителем */
+.progress__track {
+  position:absolute; left:0; right:0; bottom:0;
+  height:3px; background:var(--card-2); overflow:hidden;
+}
 .progress__fill {
-  height:100%; width:0%; border-radius:999px;
-  background:var(--primary);
+  height:100%; width:0%; background:var(--primary);
   transition:width 240ms var(--ease), background-color var(--dur) var(--ease);
 }
 .progress__fill.is-complete { background:var(--accent); }
 
 /* ═══════════════ Список упражнений ═══════════════ */
-main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /* нижний инсет под плашку таймера */
+main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /* инсет под плашку таймера */
 
 .ex-list { display:flex; flex-direction:column; gap:var(--sp-3); }
 
@@ -118,6 +182,7 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
   border-radius:var(--r-sm);
   padding-left:var(--sp-3);
   position:relative;
+  margin-top:var(--sp-4);
 }
 .ss-group::before {
   content:"суперсет";
@@ -125,33 +190,26 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
   font-size:11px; letter-spacing:.08em; text-transform:uppercase;
   color:var(--primary); font-weight:600;
 }
-.ss-group { margin-top:var(--sp-4); }
 
 .ex {
   background:var(--card);
   border:1px solid var(--divider);
   border-radius:var(--r-lg);
   padding:var(--sp-4);
+  box-shadow:var(--card-shadow);
 }
-.ex.is-done { border-color:rgba(34,197,94,.35); }
+.ex.is-done { border-color:var(--accent); }
 
 .ex__head { display:flex; gap:var(--sp-3); align-items:flex-start; }
 .ex__num {
-  flex:0 0 auto;
+  flex:0 0 auto; min-width:16px; padding-top:2px;
   font-family:var(--font-display); font-size:15px; font-weight:700;
   color:var(--fg-muted); font-variant-numeric:tabular-nums;
-  padding-top:2px; min-width:16px;
 }
 .ex__name { margin:0; font-size:17px; font-weight:600; line-height:1.3; }
 
-.ex__row {
-  display:flex; align-items:center; justify-content:space-between;
-  gap:var(--sp-3); margin-top:var(--sp-3); flex-wrap:wrap;
-}
-.ex__scheme {
-  font-family:var(--font-display); font-size:20px; font-weight:600;
-  font-variant-numeric:tabular-nums; letter-spacing:.01em;
-}
+.ex__row { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-3); flex-wrap:wrap; }
+.ex__scheme { font-family:var(--font-display); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
 .ex__rest { display:block; font-family:var(--font-body); font-size:13px; font-weight:400; color:var(--fg-muted); letter-spacing:0; }
 
 /* Кружки подходов: тап-зона ровно 44×44, зазор 8 */
@@ -161,8 +219,7 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
   border-radius:50%;
   border:2px solid var(--border-control);
   color:var(--fg);
-  font-family:var(--font-display); font-size:19px; font-weight:600;
-  font-variant-numeric:tabular-nums;
+  font-family:var(--font-display); font-size:19px; font-weight:600; font-variant-numeric:tabular-nums;
   display:grid; place-items:center;
   transition:background-color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform 120ms var(--ease);
 }
@@ -174,8 +231,7 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
 .set[aria-pressed="true"] svg { display:block; }
 
 .reset-day {
-  display:block; width:100%; min-height:var(--tap);
-  margin-top:var(--sp-6);
+  display:block; width:100%; min-height:var(--tap); margin-top:var(--sp-6);
   border:1px solid var(--divider); border-radius:var(--r-md);
   color:var(--destructive); font-size:15px; font-weight:500;
   transition:background-color var(--dur) var(--ease);
@@ -189,14 +245,13 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
   background:var(--card);
   border-top:1px solid var(--divider);
   padding-bottom:env(safe-area-inset-bottom);
-  box-shadow:0 -8px 24px rgba(0,0,0,.35);
+  box-shadow:var(--timer-shadow);
   transform:translateY(110%);
   visibility:hidden;                      /* убирает кнопки из фокуса и из дерева доступности */
   transition:transform 220ms var(--ease), visibility 0s linear 220ms;
 }
 .timer.is-open {
-  transform:translateY(0);
-  visibility:visible;
+  transform:translateY(0); visibility:visible;
   transition:transform 220ms var(--ease), visibility 0s;
 }
 
@@ -216,8 +271,7 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
 
 .timer__actions { display:flex; gap:var(--sp-2); }
 .tbtn {
-  min-width:var(--tap); height:var(--tap);
-  padding-inline:var(--sp-3);
+  min-width:var(--tap); height:var(--tap); padding-inline:var(--sp-3);
   border:1px solid var(--border-control); border-radius:var(--r-md);
   font-family:var(--font-display); font-size:17px; font-weight:600;
   display:grid; place-items:center;
@@ -229,7 +283,7 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
 
 /* ═══════════════ Справка ═══════════════ */
 .help h2 { font-family:var(--font-display); font-size:24px; font-weight:700; margin:var(--sp-8) 0 var(--sp-3); }
-.help h2:first-child { margin-top:0; }
+.help-block > h2:first-child { margin-top:0; }
 .help p { margin:0 0 var(--sp-3); }
 .help ul { margin:0 0 var(--sp-3); padding-left:var(--sp-6); }
 .help li { margin-bottom:var(--sp-2); }
