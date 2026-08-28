@@ -139,10 +139,6 @@ a { color:var(--primary); }
 /* В тёмной теме показываем солнце (куда переключимся), в светлой — луну */
 [data-theme="dark"]  .ico-moon { display:none; }
 [data-theme="light"] .ico-sun  { display:none; }
-/* Колокольчик показывает текущее состояние, а не будущее */
-[data-sound="on"]  .ico-bell-off { display:none; }
-[data-sound="off"] .ico-bell     { display:none; }
-[data-sound="on"]  #soundBtn svg { stroke:var(--primary); }
 
 /* Дни */
 .tabs { display:flex; gap:var(--sp-2); padding:6px 0; }
@@ -211,44 +207,45 @@ main { padding-block:var(--sp-4) calc(120px + env(safe-area-inset-bottom)); } /*
   font-family:var(--font-display); font-size:15px; font-weight:700;
   color:var(--fg-muted); font-variant-numeric:tabular-nums;
 }
+.ex__title { flex:1 1 auto; min-width:0; }
 .ex__name { margin:0; font-size:17px; font-weight:600; line-height:1.3; }
 
-.ex__row { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-3); flex-wrap:wrap; }
-.ex__scheme { font-family:var(--font-display); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+/* Альтернативы: чипы под названием, тап делает вариант активным */
+.ex__alts { display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--sp-2); }
+.altchip {
+  min-height:32px; padding:4px var(--sp-3);
+  border:1px dashed var(--border-control); border-radius:var(--r-sm);
+  color:var(--fg-muted); font-size:13px; line-height:1.2;
+  transition:background-color var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.altchip:hover { color:var(--fg); }
+.altchip:active { transform:scale(.96); }
 
-/* Третья строка карточки: слева отдых, справа рабочий вес */
-.ex__foot { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-2); }
+/* Схема и отдых — одной строкой */
+.ex__scheme-row { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-3); }
+.ex__scheme { font-family:var(--font-display); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
 .ex__rest { font-size:13px; color:var(--fg-muted); }
 
-.wslot { display:flex; align-items:center; gap:var(--sp-2); }
-.weight {
-  min-height:var(--tap); min-width:72px;
-  padding:0 var(--sp-3);
-  border:1px solid var(--divider); border-radius:var(--r-md);
-  background:var(--card-2);
-  font-size:15px; color:var(--fg);
-  display:inline-flex; align-items:center; gap:4px;
-  transition:background-color var(--dur) var(--ease), border-color var(--dur) var(--ease);
-}
-.weight b { font-family:var(--font-display); font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
-.weight:active { transform:scale(.96); }
-/* Подсказка с прошлой тренировки: приглушённо и пунктиром — значение ещё не подтверждено */
-.weight--hint { background:transparent; border-style:dashed; color:var(--fg-muted); }
-.weight--empty { background:transparent; border-style:dashed; color:var(--fg-muted); font-size:14px; }
-
-.winput {
-  width:96px; height:var(--tap);
-  padding:0 var(--sp-3);
-  border:2px solid var(--ring); border-radius:var(--r-md);
+/* Подходы: по строке на подход — кружок + вес + повторы */
+.ex__sets { display:flex; flex-direction:column; gap:var(--sp-2); margin-top:var(--sp-3); }
+.setrow { display:flex; align-items:center; gap:var(--sp-2); }
+.setrow__x { color:var(--fg-muted); font-size:14px; flex:0 0 auto; }
+.field {
+  width:0; flex:1 1 0; min-width:0; height:var(--tap);
+  padding:0 var(--sp-2);
+  border:1px solid var(--border-control); border-radius:var(--r-md);
   background:var(--card-2); color:var(--fg);
-  font-family:var(--font-display); font-size:20px; font-weight:700;
-  font-variant-numeric:tabular-nums; text-align:right;
+  font-family:var(--font-display); font-size:18px; font-weight:700;
+  font-variant-numeric:tabular-nums; text-align:center;
 }
-.winput__unit { font-size:15px; color:var(--fg-muted); }
+/* Плейсхолдер — подсказка, а не значение: бледнее и не жирный */
+.field::placeholder { color:var(--fg-muted); font-weight:400; opacity:.6; }
+.field:focus-visible { outline:2px solid var(--ring); outline-offset:1px; border-color:var(--ring); }
+.field--w { flex-grow:1.4; }
 
-/* Кружки подходов: тап-зона ровно 44×44, зазор 8 */
-.sets { display:flex; gap:var(--sp-2); }
+/* Кружки подходов: тап-зона ровно 44×44 */
 .set {
+  flex:0 0 auto;
   width:var(--tap); height:var(--tap);
   border-radius:50%;
   border:2px solid var(--border-control);

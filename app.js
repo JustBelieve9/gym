@@ -1,5 +1,6 @@
-/* Логика: выбор человека и темы, рендер дня, отметка подходов, рабочие веса,
-   прогресс, таймер отдыха со звуком, отчёт в телеграм, wake lock.
+/* Логика: выбор человека и темы, рендер дня, выбор альтернативы, отметка подходов,
+   вес и повторы по подходам, прогресс, визуальный таймер отдыха, пинг таймера
+   и отчёт в телеграм, wake lock.
    Программы живут в data.js. */
 (function () {
   "use strict";
@@ -11,7 +12,6 @@
   var el = {
     people:      document.querySelectorAll(".person"),
     themeBtn:    document.getElementById("themeBtn"),
-    soundBtn:    document.getElementById("soundBtn"),
     themeColor:  document.getElementById("themeColor"),
     tabs:        document.querySelectorAll(".tab"),
     panelDay:    document.getElementById("panel-day"),
@@ -37,12 +37,14 @@
     timerSkip:   document.getElementById("timerSkip")
   };
 
-  var state = { person: DEFAULT_PERSON, day: null, done: [], weights: [], startedAt: 0, sent: false };
-  var timer = { endAt: 0, total: 0, last: 0, int: null, running: false, nodes: null, scheduled: false };
+  var state = { person: DEFAULT_PERSON, day: null, done: [], log: [], pick: [], startedAt: 0, sent: false };
+  var timer = { endAt: 0, total: 0, last: 0, int: null, running: false, label: "" };
 
   function store(k, v) { try { localStorage.setItem(PREFIX + k, v); } catch (e) {} }
   function recall(k)   { try { return localStorage.getItem(PREFIX + k); } catch (e) { return null; } }
   function program()   { return PEOPLE[state.person].program; }
+  function exList()     { return program()[state.day].exercises; }
+  function activeName(i) { return (state.pick && state.pick[i]) || exList()[i].name; }
   function pad(n)      { return n < 10 ? "0" + n : String(n); }
   function esc(s)      { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
@@ -65,109 +67,6 @@
     applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
   });
 
-  /* ───────── Звук ─────────
-     iOS усыпляет Web Audio, как только экран гаснет или браузер уходит в фон.
-     Поэтому три слоя: беззвучный медиа-луп держит аудиосессию живой, тон
-     планируется в аудиографе заранее (переживает торможение главного потока),
-     Media Session помечает страницу как играющую медиа. */
-
-  var audioCtx = null, keepAliveEl = null, silentUrl = null;
-
-  function soundOn() { return recall("sound") !== "off"; }
-
-  function applySound(on) {
-    store("sound", on ? "on" : "off");
-    document.documentElement.setAttribute("data-sound", on ? "on" : "off");
-    el.soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
-    el.soundBtn.setAttribute("aria-label", on ? "Выключить звук" : "Включить звук");
-    if (!on) { cancelChime(); stopKeepAlive(); }
-  }
-
-  el.soundBtn.addEventListener("click", function () { applySound(!soundOn()); });
-
-  function ctx() {
-    try {
-      var C = window.AudioContext || window.webkitAudioContext;
-      if (!C) return null;
-      audioCtx = audioCtx || new C();
-      if (audioCtx.state === "suspended") audioCtx.resume();
-      return audioCtx;
-    } catch (e) { return null; }
-  }
-
-  /* Почти-тишина, а не чистые нули: нулевой поток iOS может выбросить как пустой */
-  function silentWav(seconds, rate) {
-    var n = Math.floor(seconds * rate), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
-    function s(off, str) { for (var i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); }
-    s(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); s(8, "WAVE");
-    s(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
-    s(36, "data"); v.setUint32(40, n * 2, true);
-    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
-    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
-  }
-
-  function startKeepAlive() {
-    if (!soundOn()) return;
-    if (!keepAliveEl) {
-      silentUrl = silentUrl || silentWav(0.5, 8000);
-      keepAliveEl = document.createElement("audio");
-      keepAliveEl.src = silentUrl;
-      keepAliveEl.loop = true;
-      keepAliveEl.setAttribute("playsinline", "");
-      keepAliveEl.volume = 0.02;
-      document.body.appendChild(keepAliveEl);
-    }
-    var p = keepAliveEl.play();
-    if (p && p.catch) p.catch(function () {});
-  }
-
-  function stopKeepAlive() { if (keepAliveEl) { try { keepAliveEl.pause(); } catch (e) {} } }
-
-  /* Два коротких тона, E6 -> B6. Свой синтез, не копия чужого сигнала. */
-  function chime(at) {
-    var c = ctx();
-    if (!c) return null;
-    var t0 = at != null ? at : c.currentTime + 0.02, nodes = [];
-    [[1319, 0], [1976, 0.07]].forEach(function (n) {
-      var o = c.createOscillator(), g = c.createGain(), t = t0 + n[1];
-      o.type = "triangle";
-      o.frequency.setValueAtTime(n[0], t);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.5, t + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      o.connect(g); g.connect(c.destination);
-      o.start(t); o.stop(t + 0.18);
-      nodes.push(o);
-    });
-    return nodes;
-  }
-
-  function cancelChime() {
-    if (!timer.nodes) return;
-    timer.nodes.forEach(function (o) { try { o.stop(0); o.disconnect(); } catch (e) {} });
-    timer.nodes = null;
-    timer.scheduled = false;
-  }
-
-  function mediaSession(on, label) {
-    if (!("mediaSession" in navigator)) return;
-    try {
-      if (on) {
-        if (window.MediaMetadata) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: "Отдых · " + label,
-            artist: PEOPLE[state.person].label,
-            album: "Тренировка"
-          });
-        }
-        navigator.mediaSession.playbackState = "playing";
-      } else {
-        navigator.mediaSession.playbackState = "none";
-      }
-    } catch (e) {}
-  }
-
   function vibrate(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
 
   /* ───────── Хранилище ───────── */
@@ -181,10 +80,43 @@
   function fresh(day) {
     return program()[day].exercises.map(function (ex) { return new Array(ex.sets).fill(false); });
   }
-  function freshWeights(day) { return program()[day].exercises.map(function () { return null; }); }
+  function freshLog(day) {
+    return program()[day].exercises.map(function (ex) {
+      var a = []; for (var i = 0; i < ex.sets; i++) a.push({ w: null, r: null }); return a;
+    });
+  }
+  function freshPick(day) { return program()[day].exercises.map(function () { return null; }); }
+
+  function numOrNull(v) { return typeof v === "number" && isFinite(v) ? v : null; }
+
+  /* Лог по подходам. Понимает и новый формат (log: [[{w,r}]]), и старые записи
+     с одним весом на упражнение (weights: [60, …]) — старый вес уходит в первый подход. */
+  function normalizeLog(saved, day) {
+    var base = freshLog(day);
+    if (Array.isArray(saved.log) && saved.log.length === base.length) {
+      var okShape = base.every(function (arr, i) {
+        return Array.isArray(saved.log[i]) && saved.log[i].length === arr.length;
+      });
+      if (okShape) {
+        return base.map(function (arr, i) {
+          return arr.map(function (_, j) {
+            var s = saved.log[i][j] || {};
+            return { w: numOrNull(s.w), r: numOrNull(s.r) };
+          });
+        });
+      }
+    }
+    if (Array.isArray(saved.weights) && saved.weights.length === base.length) {
+      base.forEach(function (arr, i) {
+        if (arr[0] && saved.weights[i] != null) arr[0].w = numOrNull(saved.weights[i]);
+      });
+    }
+    return base;
+  }
 
   function load(day) {
-    var blank = { sets: fresh(day), weights: freshWeights(day), startedAt: 0, sent: false };
+    var exs = program()[day].exercises;
+    var blank = { sets: fresh(day), log: freshLog(day), pick: freshPick(day), startedAt: 0, sent: false };
     var raw = recall(key(day));
     if (!raw) return blank;
     try {
@@ -197,9 +129,14 @@
       }
       return {
         sets: saved.sets,
-        // записи до появления весов их не содержат — дополняем, а не считаем битыми
-        weights: Array.isArray(saved.weights) && saved.weights.length === shape.length
-          ? saved.weights : freshWeights(day),
+        log: normalizeLog(saved, day),
+        pick: Array.isArray(saved.pick) && saved.pick.length === shape.length
+          ? saved.pick.map(function (p, idx) {
+              var ex = exs[idx];
+              var ok = p && (p === ex.name || (ex.alts || []).indexOf(p) !== -1);
+              return ok ? p : null;
+            })
+          : freshPick(day),
         startedAt: saved.startedAt || 0,
         sent: Boolean(saved.sent)
       };
@@ -208,19 +145,33 @@
 
   function save() {
     store(key(state.day), JSON.stringify({
-      date: today(), sets: state.done, weights: state.weights,
+      date: today(), sets: state.done, log: state.log, pick: state.pick,
       startedAt: state.startedAt, sent: state.sent
     }));
   }
 
-  /* Последние веса — по НАЗВАНИЮ упражнения, не по номеру: перестановка
-     программы в data.js не должна путать веса между упражнениями. */
-  function lastWeights() {
-    try { return JSON.parse(recall(state.person + "-lastw") || "{}"); } catch (e) { return {}; }
+  /* Последние вес и повторы — по НАЗВАНИЮ упражнения, не по номеру: перестановка
+     программы в data.js и переключение альтернативы не путают подсказки между
+     упражнениями. Старый формат (число вместо {w,r}) читается как {w:число}. */
+  function lastLog() {
+    var m;
+    try { m = JSON.parse(recall(state.person + "-lastw") || "{}"); } catch (e) { m = {}; }
+    Object.keys(m).forEach(function (k) {
+      if (typeof m[k] === "number") m[k] = { w: m[k], r: null };
+    });
+    return m;
   }
-  function rememberWeight(name, val) {
-    var m = lastWeights();
-    if (val == null) delete m[name]; else m[name] = val;
+  function rememberSet(name, w, r) {
+    var m = lastLog();
+    if (w == null && r == null) {
+      delete m[name];
+    } else {
+      var cur = m[name] && typeof m[name] === "object" ? m[name] : {};
+      m[name] = {
+        w: w != null ? w : (cur.w != null ? cur.w : null),
+        r: r != null ? r : (cur.r != null ? cur.r : null)
+      };
+    }
     store(state.person + "-lastw", JSON.stringify(m));
   }
 
@@ -251,88 +202,82 @@
     art.className = "ex";
     art.dataset.ex = idx;
 
-    var sets = "";
+    var active = activeName(idx);
+    var variants = [ex.name].concat(ex.alts || []);
+    var chips = variants
+      .filter(function (v) { return v !== active; })
+      .map(function (v) { return '<button type="button" class="altchip" data-name="' + esc(v) + '">' + esc(v) + "</button>"; })
+      .join("");
+    var altsHtml = (ex.alts && ex.alts.length) ? '<div class="ex__alts">' + chips + "</div>" : "";
+
+    var rows = "";
     for (var i = 0; i < ex.sets; i++) {
-      sets += '<button type="button" class="set" data-set="' + i + '"' +
-              ' aria-pressed="false" aria-label="Подход ' + (i + 1) + ' из ' + ex.sets + '">' +
-              '<span class="set__n">' + (i + 1) + "</span>" + icon("i-check") + "</button>";
+      var rec = (state.log[idx] && state.log[idx][i]) || { w: null, r: null };
+      rows +=
+        '<div class="setrow" data-set="' + i + '">' +
+          '<button type="button" class="set" data-set="' + i + '" aria-pressed="false"' +
+            ' aria-label="Подход ' + (i + 1) + " из " + ex.sets + '">' +
+            '<span class="set__n">' + (i + 1) + "</span>" + icon("i-check") + "</button>" +
+          '<input class="field field--w" type="text" inputmode="decimal" enterkeyhint="next"' +
+            ' data-k="w" aria-label="Вес, подход ' + (i + 1) + '" value="' + (rec.w != null ? fmtWeight(rec.w) : "") + '">' +
+          '<span class="setrow__x" aria-hidden="true">×</span>' +
+          '<input class="field field--r" type="text" inputmode="numeric" enterkeyhint="done"' +
+            ' data-k="r" aria-label="Повторы, подход ' + (i + 1) + '" value="' + (rec.r != null ? rec.r : "") + '">' +
+        "</div>";
     }
 
     art.innerHTML =
       '<div class="ex__head">' +
         '<span class="ex__num">' + (idx + 1) + "</span>" +
-        '<h3 class="ex__name">' + ex.name + "</h3>" +
+        '<div class="ex__title">' +
+          '<h3 class="ex__name">' + esc(active) + "</h3>" + altsHtml +
+        "</div>" +
       "</div>" +
-      '<div class="ex__row">' +
+      '<div class="ex__scheme-row">' +
         '<span class="ex__scheme">' + ex.sets + " × " + ex.reps + "</span>" +
-        '<div class="sets" role="group" aria-label="Подходы: ' + ex.name + '">' + sets + "</div>" +
-      "</div>" +
-      '<div class="ex__foot">' +
         '<span class="ex__rest">' + restLabel(ex.rest) + "</span>" +
-        '<span class="wslot" data-w="' + idx + '"></span>' +
-      "</div>";
+      "</div>" +
+      '<div class="ex__sets" role="group" aria-label="Подходы: ' + esc(active) + '">' + rows + "</div>";
 
     return art;
   }
 
-  function renderWeight(idx) {
-    var slot = el.list.querySelector('.wslot[data-w="' + idx + '"]');
-    if (!slot) return;
-    var ex = program()[state.day].exercises[idx];
-    var own = state.weights[idx];
-    var hint = lastWeights()[ex.name];
-    var label = "Рабочий вес: " + ex.name;
-
-    if (own != null) {
-      slot.innerHTML = '<button type="button" class="weight" aria-label="' + label + '">' +
-        "<b>" + fmtWeight(own) + "</b> кг</button>";
-    } else if (hint != null) {
-      slot.innerHTML = '<button type="button" class="weight weight--hint" aria-label="' + label +
-        ', в прошлый раз ' + fmtWeight(hint) + '"><b>' + fmtWeight(hint) + "</b> кг</button>";
-    } else {
-      slot.innerHTML = '<button type="button" class="weight weight--empty" aria-label="' + label +
-        '">+ вес</button>';
-    }
+  /* Плейсхолдеры веса и повторов: старт от прошлой тренировки этого упражнения,
+     дальше по сессии подхватывается уже введённое значение. */
+  function refreshHints(exIdx) {
+    var art = el.list.querySelector('[data-ex="' + exIdx + '"]');
+    if (!art) return;
+    var last = lastLog()[activeName(exIdx)] || {};
+    var prevW = last.w != null ? last.w : null;
+    var prevR = last.r != null ? last.r : null;
+    var lowReps = (exList()[exIdx].reps.match(/\d+/) || [""])[0];
+    var rows = art.querySelectorAll(".setrow");
+    Array.prototype.forEach.call(rows, function (row, i) {
+      var rec = (state.log[exIdx] && state.log[exIdx][i]) || { w: null, r: null };
+      var wf = row.querySelector(".field--w");
+      var rf = row.querySelector(".field--r");
+      if (wf) wf.placeholder = prevW != null ? fmtWeight(prevW) : "";
+      if (rf) rf.placeholder = prevR != null ? String(prevR) : lowReps;
+      if (rec.w != null) prevW = rec.w;
+      if (rec.r != null) prevR = rec.r;
+    });
   }
 
-  function openWeightEditor(idx) {
-    var slot = el.list.querySelector('.wslot[data-w="' + idx + '"]');
-    if (!slot) return;
-    var ex = program()[state.day].exercises[idx];
-    var start = state.weights[idx] != null ? state.weights[idx] : lastWeights()[ex.name];
-
-    slot.innerHTML = '<input class="winput" type="text" inputmode="decimal" enterkeyhint="done"' +
-      ' aria-label="Рабочий вес: ' + ex.name + '" value="' + (start != null ? fmtWeight(start) : "") +
-      '"><span class="winput__unit">кг</span>';
-
-    var input = slot.querySelector(".winput");
-    input.focus();
-    input.select();
-
-    function commit() {
-      input.removeEventListener("blur", commit);
-      var raw = input.value.trim().replace(",", ".");
-      var n = raw === "" ? null : parseFloat(raw);
-      if (n != null && (!isFinite(n) || n < 0 || n > 999)) n = state.weights[idx];
-      state.weights[idx] = n;
-      rememberWeight(ex.name, n);
-      save();
-      renderWeight(idx);
-    }
-    function cancel() { input.removeEventListener("blur", commit); renderWeight(idx); }
-
-    input.addEventListener("blur", commit);
-    input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-      if (e.key === "Escape") { e.preventDefault(); cancel(); }
-    });
+  function rebuildCard(idx) {
+    var old = el.list.querySelector('[data-ex="' + idx + '"]');
+    if (!old) return;
+    var node = exerciseNode(exList()[idx], idx);
+    old.parentNode.replaceChild(node, old);
+    applyMarks(idx);
+    refreshHints(idx);
   }
 
   function renderDay(day) {
     state.day = day;
     var loaded = load(day);
     state.done = loaded.sets;
-    state.weights = loaded.weights;
+    state.log = loaded.log;
+    state.pick = loaded.pick;
     state.startedAt = loaded.startedAt;
     state.sent = loaded.sent;
 
@@ -355,23 +300,26 @@
         group = null; groupKey = null;
         el.list.appendChild(node);
       }
-      renderWeight(i);
     });
 
     restoreMarks();
+    data.exercises.forEach(function (ex, i) { refreshHints(i); });
     updateProgress();
   }
 
-  function restoreMarks() {
-    state.done.forEach(function (arr, exIdx) {
-      var art = el.list.querySelector('[data-ex="' + exIdx + '"]');
-      if (!art) return;
-      arr.forEach(function (on, setIdx) {
-        var b = art.querySelector('[data-set="' + setIdx + '"]');
-        if (b) b.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-      art.classList.toggle("is-done", arr.every(Boolean));
+  function applyMarks(exIdx) {
+    var art = el.list.querySelector('[data-ex="' + exIdx + '"]');
+    if (!art) return;
+    var arr = state.done[exIdx] || [];
+    arr.forEach(function (on, setIdx) {
+      var b = art.querySelector('.set[data-set="' + setIdx + '"]');
+      if (b) b.setAttribute("aria-pressed", on ? "true" : "false");
     });
+    art.classList.toggle("is-done", arr.length > 0 && arr.every(Boolean));
+  }
+
+  function restoreMarks() {
+    state.done.forEach(function (_, exIdx) { applyMarks(exIdx); });
   }
 
   function counts() {
@@ -393,11 +341,19 @@
     el.sendReport.disabled = c.done === 0;
   }
 
-  /* ───────── Подходы и веса ───────── */
+  /* ───────── Подходы, веса, альтернативы ───────── */
 
   el.list.addEventListener("click", function (e) {
-    var w = e.target.closest(".weight");
-    if (w) { openWeightEditor(Number(w.closest(".wslot").dataset.w)); return; }
+    var chip = e.target.closest(".altchip");
+    if (chip) {
+      var cart = chip.closest(".ex");
+      var ci = Number(cart.dataset.ex);
+      var picked = chip.dataset.name;
+      state.pick[ci] = picked === exList()[ci].name ? null : picked;
+      save();
+      rebuildCard(ci);
+      return;
+    }
 
     var btn = e.target.closest(".set");
     if (!btn) return;
@@ -416,43 +372,81 @@
     if (on) {
       vibrate(10);
       keepAwake();
-      var rest = program()[state.day].exercises[exIdx].rest;
-      if (rest > 0) startTimer(rest);
+      var rest = exList()[exIdx].rest;
+      if (rest > 0) startTimer(rest, activeName(exIdx));
       var c = counts();
       if (c.done === c.total && !state.sent) sendReport(true);
     }
   });
 
+  el.list.addEventListener("change", function (e) {
+    var f = e.target.closest(".field");
+    if (!f) return;
+    var art = f.closest(".ex"), row = f.closest(".setrow");
+    var exIdx = Number(art.dataset.ex), setIdx = Number(row.dataset.set), k = f.dataset.k;
+
+    var raw = f.value.trim().replace(",", ".");
+    var n = raw === "" ? null : parseFloat(raw);
+    var prev = state.log[exIdx][setIdx][k];
+    if (n != null && (!isFinite(n) || n < 0 || n > 999)) n = prev;
+    if (n != null && k === "r") n = Math.round(n);
+
+    state.log[exIdx][setIdx][k] = n;
+    f.value = n == null ? "" : (k === "w" ? fmtWeight(n) : String(n));
+
+    var rec = state.log[exIdx][setIdx];
+    rememberSet(activeName(exIdx), rec.w, rec.r);
+    save();
+    refreshHints(exIdx);
+  });
+
   el.resetDay.addEventListener("click", function () {
     if (!confirm("Сбросить все отметки за " + program()[state.day].title.toLowerCase() + "?")) return;
     state.done = fresh(state.day);
+    state.log = freshLog(state.day);
+    state.pick = freshPick(state.day);
     state.startedAt = 0;
     state.sent = false;
     save();
-    restoreMarks();
-    updateProgress();
+    renderDay(state.day);
   });
 
-  /* ───────── Таймер отдыха ───────── */
+  /* ───────── Таймер отдыха ─────────
+     Визуальный обратный отсчёт на экране. Сигнал об окончании приходит пингом
+     в телеграм (worker сам планирует отправку — переживает сон телефона). */
 
   function fmt(sec) { return Math.floor(sec / 60) + ":" + pad(sec % 60); }
 
-  function startTimer(sec) {
-    cancelChime();
+  function pingTimer(seconds, label) {
+    try {
+      fetch(REPORT_URL + "/timer", {
+        method: "POST", keepalive: true,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ person: state.person, seconds: Math.round(seconds), label: label || "" })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function cancelPing() {
+    try {
+      fetch(REPORT_URL + "/timer/cancel", {
+        method: "POST", keepalive: true,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ person: state.person })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  function startTimer(sec, label) {
     timer.total = sec;
     timer.last = sec;
+    timer.label = label || "";
     timer.endAt = Date.now() + sec * 1000;
     timer.running = true;
     el.timer.classList.remove("is-done");
     el.timer.classList.add("is-open");
     el.timerLabel.textContent = "Отдых";
 
-    if (soundOn()) {
-      startKeepAlive();
-      var c = ctx();
-      if (c) { timer.nodes = chime(c.currentTime + sec); timer.scheduled = Boolean(timer.nodes); }
-    }
-    mediaSession(true, fmt(sec));
+    pingTimer(sec, timer.label);
 
     tick();
     if (timer.int) clearInterval(timer.int);
@@ -474,12 +468,7 @@
     el.timerLabel.textContent = "Готово";
     el.timerTime.textContent = "0:00";
     el.timerLine.style.width = "100%";
-    // если тон был запланирован заранее — он уже прозвучал сам, второй раз не нужен
-    if (soundOn() && !timer.scheduled) chime();
-    timer.nodes = null;
-    timer.scheduled = false;
-    vibrate([70, 80, 70]);
-    mediaSession(false);
+    cancelPing();                 // таймер догорел на экране — серверный пинг уже не нужен
     setTimeout(function () { if (!timer.running) closeTimer(); }, 6000);
   }
 
@@ -487,27 +476,18 @@
     clearInterval(timer.int);
     timer.int = null;
     timer.running = false;
-    cancelChime();
-    stopKeepAlive();
-    mediaSession(false);
+    cancelPing();
     el.timer.classList.remove("is-open");
   }
 
   el.timerAdd.addEventListener("click", function () {
-    if (!timer.running) { startTimer(30); return; }
+    if (!timer.running) { startTimer(30, ""); return; }
     timer.endAt += 30000;
     timer.total += 30;
-    cancelChime();
-    if (soundOn()) {
-      var c = ctx();
-      if (c) {
-        timer.nodes = chime(c.currentTime + Math.max(0, (timer.endAt - Date.now()) / 1000));
-        timer.scheduled = Boolean(timer.nodes);
-      }
-    }
+    pingTimer(Math.max(0, (timer.endAt - Date.now()) / 1000), timer.label);
     tick();
   });
-  el.timerRestart.addEventListener("click", function () { startTimer(timer.last || 90); });
+  el.timerRestart.addEventListener("click", function () { startTimer(timer.last || 90, timer.label); });
   el.timerSkip.addEventListener("click", closeTimer);
 
   /* ───────── Отчёт в телеграм ───────── */
@@ -520,6 +500,16 @@
     toast.t = setTimeout(function () { el.toast.classList.remove("is-on"); }, 4000);
   }
 
+  function setSummary(i) {
+    var parts = state.log[i].map(function (rec) {
+      if (rec.w != null && rec.r != null) return fmtWeight(rec.w) + "×" + rec.r;
+      if (rec.w != null) return fmtWeight(rec.w) + " кг";
+      if (rec.r != null) return rec.r + " повт";
+      return null;
+    }).filter(Boolean);
+    return parts.length ? " · " + parts.join(", ") : "";
+  }
+
   function reportText() {
     var d = program()[state.day], c = counts(), lines = [];
     lines.push("🏋️ <b>" + esc(PEOPLE[state.person].label) + " · " + esc(d.title) + "</b>");
@@ -528,9 +518,7 @@
     d.exercises.forEach(function (ex, i) {
       var arr = state.done[i], n = arr.filter(Boolean).length;
       var mark = n === arr.length ? "✅" : (n ? "🟡" : "⚪️");
-      var w = state.weights[i];
-      lines.push(mark + " " + esc(ex.name) +
-        (w != null ? " · " + fmtWeight(w) + " кг" : "") + " · " + n + "/" + arr.length);
+      lines.push(mark + " " + esc(activeName(i)) + setSummary(i) + " · " + n + "/" + arr.length);
     });
     lines.push("");
     var tail = "<b>" + c.done + "/" + c.total + "</b> подходов";
@@ -661,7 +649,6 @@
   /* ───────── Старт ───────── */
 
   applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
-  applySound(soundOn());
   selectPerson(recall("person") || DEFAULT_PERSON);
   selectTab(WEEKDAY_MAP[new Date().getDay()] || "mon");
 })();

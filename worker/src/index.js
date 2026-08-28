@@ -6,12 +6,14 @@
    Секреты (ставятся через `wrangler secret put`, в файлах их нет):
      TG_TOKEN — токен бота от @BotFather
    Привязки:
-     CHATS — KV-неймспейс, ключи chat:k и chat:a
+     CHATS      — KV-неймспейс, ключи chat:k и chat:a
+     REST_TIMER — Durable Object (класс RestTimer): таймер отдыха с пингом в телеграм
 */
 
 const ALLOWED_ORIGIN = "https://justbelieve9.github.io";
 const PEOPLE = { k: "Костя", a: "Маша" };
 const RATE_LIMIT_PER_DAY = 40;
+const TIMER_LIMIT_PER_DAY = 250;   // за тренировку ~15–25 пингов, лимит с запасом на двоих
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -56,6 +58,49 @@ async function rateOk(env) {
   return n <= RATE_LIMIT_PER_DAY;
 }
 
+async function timerRateOk(env) {
+  const key = "rate:timer:" + new Date().toISOString().slice(0, 10);
+  const n = Number((await env.CHATS.get(key)) || 0) + 1;
+  await env.CHATS.put(key, String(n), { expirationTtl: 172800 });
+  return n <= TIMER_LIMIT_PER_DAY;
+}
+
+/* Durable Object: один инстанс на человека (idFromName "timer:<код>").
+   /set ставит alarm, /cancel снимает. По alarm шлём пинг в телеграм —
+   планирование на стороне Cloudflare переживает сон телефона и вкладки. */
+export class RestTimer {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/cancel") {
+      await this.state.storage.deleteAlarm();
+      await this.state.storage.deleteAll();
+      return new Response("ok");
+    }
+    const { seconds, person, label } = await request.json();
+    await this.state.storage.put({ person, label: label || "" });
+    await this.state.storage.setAlarm(Date.now() + seconds * 1000);
+    return new Response("ok");
+  }
+
+  async alarm() {
+    const person = await this.state.storage.get("person");
+    const label = await this.state.storage.get("label");
+    await this.state.storage.deleteAll();
+    if (!person) return;
+    const chatId = await this.env.CHATS.get("chat:" + person);
+    if (!chatId) return;
+    await tg(this.env, "sendMessage", {
+      chat_id: chatId,
+      text: "⏱️ Отдых окончен" + (label ? " · " + label : "")
+    });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -68,6 +113,7 @@ export default {
       return json({
         ok: true,
         tokenConfigured: Boolean(env.TG_TOKEN),
+        timerBinding: Boolean(env.REST_TIMER),
         chats: {
           k: Boolean(await env.CHATS.get("chat:k")),
           a: Boolean(await env.CHATS.get("chat:a"))
@@ -116,6 +162,43 @@ export default {
           });
         }
       }
+      return json({ ok: true });
+    }
+
+    /* ── Таймер отдыха: планируем/снимаем пинг в телеграм ── */
+    if (path === "/timer" || path === "/timer/cancel") {
+      if (request.method !== "POST") return json({ ok: false, error: "только POST" }, 405);
+      if (request.headers.get("origin") !== ALLOWED_ORIGIN) {
+        return json({ ok: false, error: "чужой origin" }, 403);
+      }
+      const body = await request.json().catch(() => null);
+      if (!body || !PEOPLE[body.person]) return json({ ok: false, error: "плохой запрос" }, 400);
+
+      const stub = env.REST_TIMER.get(env.REST_TIMER.idFromName("timer:" + body.person));
+
+      if (path === "/timer/cancel") {
+        await stub.fetch("https://do/cancel", { method: "POST" });
+        return json({ ok: true });
+      }
+
+      const secs = Number(body.seconds);
+      if (!isFinite(secs) || secs < 5 || secs > 600) {
+        return json({ ok: false, error: "плохой интервал" }, 400);
+      }
+      if (!env.TG_TOKEN) return json({ ok: false, error: "TG_TOKEN не задан" }, 500);
+      if (!(await timerRateOk(env))) return json({ ok: false, error: "слишком часто" }, 429);
+      if (!(await env.CHATS.get("chat:" + body.person))) {
+        return json({ ok: false, error: "телеграм не подключён" }, 409);
+      }
+
+      await stub.fetch("https://do/set", {
+        method: "POST",
+        body: JSON.stringify({
+          seconds: secs,
+          person: body.person,
+          label: String(body.label || "").slice(0, 80)
+        })
+      });
       return json({ ok: true });
     }
 

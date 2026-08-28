@@ -10,3 +10,13 @@ compatibility_date = "2026-08-01"
 [[kv_namespaces]]
 binding = "CHATS"
 id = "7cf5eeae7539446caeb4e10fb844ffc0"
+
+# Таймер отдыха: сайт шлёт POST /timer, Durable Object ставит alarm и по нему
+# отправляет пинг в телеграм. Срабатывает, даже когда телефон заблокирован.
+[[durable_objects.bindings]]
+name = "REST_TIMER"
+class_name = "RestTimer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RestTimer"]
